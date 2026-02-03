@@ -1,15 +1,25 @@
 # WP-OpenClaw
 
-**AI-managed WordPress, out of the box.**
+**Give your AI agent a home.**
 
-WP-OpenClaw bundles everything an AI agent needs to autonomously operate a WordPress site:
+WP-OpenClaw is a self-contained environment for AI agents to autonomously operate WordPress sites. Deploy it on a VPS — any server will do — and your agent gets its own isolated home: a WordPress installation it controls, tools to build with, and the ability to schedule its own work.
 
-- **OpenClaw** — The AI agent framework
-- **WordPress** — Pre-configured for AI management
-- **Data Machine** — Self-scheduling execution layer for autonomous operation
-- **Agent Skills** — WordPress development skills from `wordpress/agent-skills`
+## The Concept
+
+A VPS becomes your agent's headquarters:
+- **Isolated environment** — The agent's own space, not shared infrastructure
+- **Full control** — WP-CLI, file system, database access
+- **Self-scheduling** — Data Machine lets the agent set reminders and queue tasks
+- **Always available** — 24/7 operation without human intervention
+
+This isn't "AI that can edit WordPress." This is an AI that *runs* a WordPress site.
 
 ## What's Included
+
+- **OpenClaw** — The AI agent framework
+- **WordPress** — Pre-configured for AI management  
+- **Data Machine** — Self-scheduling execution layer (reminder system + task queue + workflow executor)
+- **Agent Skills** — WordPress development skills from `wordpress/agent-skills`
 
 ```
 wp-openclaw/
@@ -27,10 +37,10 @@ wp-openclaw/
 
 ## Quick Start
 
-1. Deploy the stack (Docker, manual install, or your preferred method)
-2. Point your AI agent at the `wp-openclaw-setup` skill
-3. The agent follows the skill to configure everything
-4. Start building
+1. **Get a VPS** — Any provider works (Hetzner, DigitalOcean, Linode, etc.)
+2. **Deploy WP-OpenClaw** — Run the installer or use Docker
+3. **Point your agent at the setup skill** — It configures everything
+4. **Your agent has a home** — Watch it operate
 
 ## The Pitch
 
@@ -40,7 +50,7 @@ Most AI + WordPress setups are reactive. The AI waits for commands.
 
 With WP-OpenClaw + Data Machine, your AI can:
 - Schedule itself to check on things
-- Queue up work and execute autonomously
+- Queue up work and execute autonomously  
 - Chain tasks together (publish → optimize → promote)
 - Self-improve by learning from results
 
