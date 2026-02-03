@@ -12,23 +12,77 @@ This skill is for the **local agent** (Claude Code, etc.) assisting with install
 
 ---
 
+## FIRST: Ask the User About Their Situation
+
+Before proceeding, determine which scenario applies:
+
+### Scenario A: Fresh Install
+> "I want a new WordPress site managed by OpenClaw"
+
+- Fresh VPS, nothing installed yet
+- Use: `SITE_DOMAIN=example.com ./setup.sh`
+
+### Scenario B: Existing WordPress (Same Server)
+> "I have a WordPress site and want to add OpenClaw to it"
+
+- WordPress already running
+- Use: `EXISTING_WP=/var/www/mysite ./setup.sh --existing`
+
+### Scenario C: Migration to New VPS
+> "I have a WordPress site elsewhere and want to move it to an OpenClaw-managed VPS"
+
+This is a two-step process:
+1. Export from old server, import to new VPS
+2. Run setup with `--existing`
+
+**Ask the user:**
+- Do you have an existing WordPress site?
+- Is it on this server or do you need to migrate it?
+- What's the domain?
+
+---
+
 ## Quick Path: setup.sh
 
-The easiest installation method is the setup script:
-
+### Fresh Install
 ```bash
-# SSH to the server
 ssh root@server-ip
-
-# Clone and run
 git clone https://github.com/Sarai-Chinwag/wp-openclaw.git
 cd wp-openclaw
 SITE_DOMAIN=yourdomain.com ./setup.sh
 ```
 
-The script handles everything: dependencies, WordPress, Data Machine, OpenClaw, skills, and workspace files.
+### Existing WordPress
+```bash
+ssh root@server-ip
+git clone https://github.com/Sarai-Chinwag/wp-openclaw.git
+cd wp-openclaw
+EXISTING_WP=/var/www/existing-site ./setup.sh --existing
+```
 
-If the user prefers step-by-step or the script doesn't fit their environment, use the manual phases below.
+### Migration Workflow
+```bash
+# On OLD server: Export
+mysqldump -u user -p database_name > backup.sql
+tar -czf wp-content.tar.gz -C /var/www/oldsite wp-content/
+
+# Transfer to NEW server
+scp backup.sql wp-content.tar.gz root@newserver:/tmp/
+
+# On NEW server: Import
+mysql -e "CREATE DATABASE wordpress;"
+mysql wordpress < /tmp/backup.sql
+mkdir -p /var/www/mysite
+tar -xzf /tmp/wp-content.tar.gz -C /var/www/mysite/
+# Copy wp-config.php and core files, update DB credentials
+
+# Then run setup
+git clone https://github.com/Sarai-Chinwag/wp-openclaw.git
+cd wp-openclaw
+EXISTING_WP=/var/www/mysite ./setup.sh --existing
+```
+
+The script handles everything: dependencies, WordPress (if fresh), Data Machine, OpenClaw, skills, and workspace files.
 
 ---
 
@@ -38,6 +92,8 @@ Use when the user says things like:
 - "Help me install OpenClaw on my server"
 - "Set up wp-openclaw on this VPS"
 - "I have a fresh server, let's get OpenClaw running"
+- "Add OpenClaw to my existing WordPress site"
+- "I want to migrate my site to a dedicated OpenClaw VPS"
 
 **Do NOT use** for ongoing WordPress management — that's handled by the OpenClaw agent's pre-loaded skills after installation.
 
@@ -48,8 +104,9 @@ Use when the user says things like:
 Before starting, confirm with the user:
 
 1. **VPS access** — IP address, SSH credentials or key
-2. **Domain** (optional but recommended) — For the WordPress site
-3. **Target OS** — Ubuntu 22.04+ or Debian 12+ recommended
+2. **Scenario** — Fresh install, existing WordPress, or migration?
+3. **Domain** — For the WordPress site
+4. **Target OS** — Ubuntu 22.04+ or Debian 12+ recommended
 
 ---
 

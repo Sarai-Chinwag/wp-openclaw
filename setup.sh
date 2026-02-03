@@ -3,8 +3,10 @@
 # wp-openclaw setup script
 # Run this on your target VPS to install WordPress + OpenClaw + Data Machine
 #
-# Usage: curl -fsSL https://raw.githubusercontent.com/Sarai-Chinwag/wp-openclaw/main/setup.sh | bash
-#    or: git clone ... && cd wp-openclaw && ./setup.sh
+# Usage:
+#   Fresh install:    SITE_DOMAIN=example.com ./setup.sh
+#   Existing WP:      EXISTING_WP=/var/www/mysite ./setup.sh --existing
+#   Migration:        See --help for migration workflow
 #
 
 set -e
@@ -13,11 +15,74 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 log() { echo -e "${GREEN}[wp-openclaw]${NC} $1"; }
 warn() { echo -e "${YELLOW}[wp-openclaw]${NC} $1"; }
 error() { echo -e "${RED}[wp-openclaw]${NC} $1"; exit 1; }
+info() { echo -e "${BLUE}[wp-openclaw]${NC} $1"; }
+
+# ============================================================================
+# Parse arguments
+# ============================================================================
+
+MODE="fresh"
+SKIP_DEPS=false
+SHOW_HELP=false
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --existing)
+      MODE="existing"
+      shift
+      ;;
+    --skip-deps)
+      SKIP_DEPS=true
+      shift
+      ;;
+    --help|-h)
+      SHOW_HELP=true
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [ "$SHOW_HELP" = true ]; then
+  echo "wp-openclaw setup script"
+  echo ""
+  echo "USAGE:"
+  echo "  Fresh install:     SITE_DOMAIN=example.com ./setup.sh"
+  echo "  Existing WordPress: EXISTING_WP=/var/www/mysite ./setup.sh --existing"
+  echo ""
+  echo "OPTIONS:"
+  echo "  --existing     Add OpenClaw to existing WordPress (skip WP install)"
+  echo "  --skip-deps    Skip apt package installation"
+  echo "  --help, -h     Show this help"
+  echo ""
+  echo "ENVIRONMENT VARIABLES:"
+  echo "  SITE_DOMAIN    Domain for fresh install (default: example.com)"
+  echo "  SITE_PATH      WordPress path for fresh install (default: /var/www/\$SITE_DOMAIN)"
+  echo "  EXISTING_WP    Path to existing WordPress (required with --existing)"
+  echo "  DB_NAME        Database name (fresh install only)"
+  echo "  DB_USER        Database user (fresh install only)"
+  echo "  DB_PASS        Database password (fresh install only)"
+  echo ""
+  echo "MIGRATION WORKFLOW:"
+  echo "  1. On old server: Export database and wp-content"
+  echo "     mysqldump dbname > backup.sql"
+  echo "     tar -czf wp-content.tar.gz wp-content/"
+  echo ""
+  echo "  2. On new VPS: Import and run setup"
+  echo "     mysql dbname < backup.sql"
+  echo "     tar -xzf wp-content.tar.gz -C /var/www/mysite/"
+  echo "     EXISTING_WP=/var/www/mysite ./setup.sh --existing"
+  echo ""
+  exit 0
+fi
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
@@ -37,13 +102,27 @@ if [[ "$OS" != "ubuntu" && "$OS" != "debian" ]]; then
 fi
 
 log "Detected OS: $OS"
+log "Mode: $MODE"
 
 # ============================================================================
-# Configuration (edit these or pass as environment variables)
+# Configuration
 # ============================================================================
 
-SITE_DOMAIN="${SITE_DOMAIN:-example.com}"
-SITE_PATH="${SITE_PATH:-/var/www/$SITE_DOMAIN}"
+if [ "$MODE" = "existing" ]; then
+  if [ -z "$EXISTING_WP" ]; then
+    error "EXISTING_WP must be set when using --existing mode"
+  fi
+  if [ ! -f "$EXISTING_WP/wp-config.php" ]; then
+    error "No wp-config.php found at $EXISTING_WP - is this a WordPress installation?"
+  fi
+  SITE_PATH="$EXISTING_WP"
+  SITE_DOMAIN=$(cd "$SITE_PATH" && wp option get siteurl --allow-root 2>/dev/null | sed 's|https\?://||' || basename "$SITE_PATH")
+  log "Existing WordPress detected at: $SITE_PATH"
+  log "Site URL: $SITE_DOMAIN"
+else
+  SITE_DOMAIN="${SITE_DOMAIN:-example.com}"
+  SITE_PATH="${SITE_PATH:-/var/www/$SITE_DOMAIN}"
+fi
 DB_NAME="${DB_NAME:-wordpress}"
 DB_USER="${DB_USER:-wordpress}"
 DB_PASS="${DB_PASS:-$(openssl rand -base64 16)}"
@@ -59,68 +138,81 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Phase 1: System Dependencies
 # ============================================================================
 
-log "Updating system packages..."
-apt update && apt upgrade -y
+if [ "$SKIP_DEPS" = false ]; then
+  log "Updating system packages..."
+  apt update && apt upgrade -y
 
-log "Installing dependencies..."
-apt install -y \
-  nginx \
-  php8.2-fpm php8.2-mysql php8.2-xml php8.2-curl php8.2-mbstring \
-  php8.2-zip php8.2-gd php8.2-intl php8.2-imagick \
-  mariadb-server \
-  git unzip curl wget
+  log "Installing dependencies..."
+  apt install -y \
+    nginx \
+    php8.2-fpm php8.2-mysql php8.2-xml php8.2-curl php8.2-mbstring \
+    php8.2-zip php8.2-gd php8.2-intl php8.2-imagick \
+    mariadb-server \
+    git unzip curl wget
 
-# Node.js
-if ! command -v node &> /dev/null; then
-  log "Installing Node.js..."
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-  apt install -y nodejs
-fi
+  # Node.js
+  if ! command -v node &> /dev/null; then
+    log "Installing Node.js..."
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    apt install -y nodejs
+  fi
 
-# WP-CLI
-if ! command -v wp &> /dev/null; then
-  log "Installing WP-CLI..."
-  curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
-  chmod +x wp-cli.phar
-  mv wp-cli.phar /usr/local/bin/wp
-fi
-
-# ============================================================================
-# Phase 2: Database
-# ============================================================================
-
-log "Configuring database..."
-mysql -e "CREATE DATABASE IF NOT EXISTS $DB_NAME;"
-mysql -e "CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';"
-mysql -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';"
-mysql -e "FLUSH PRIVILEGES;"
-
-# ============================================================================
-# Phase 3: WordPress
-# ============================================================================
-
-log "Installing WordPress at $SITE_PATH..."
-mkdir -p "$SITE_PATH"
-cd "$SITE_PATH"
-
-if [ ! -f wp-config.php ]; then
-  wp core download --allow-root
-  wp config create --allow-root \
-    --dbname="$DB_NAME" \
-    --dbuser="$DB_USER" \
-    --dbpass="$DB_PASS" \
-    --dbhost="localhost"
-  wp core install --allow-root \
-    --url="https://$SITE_DOMAIN" \
-    --title="My Site" \
-    --admin_user="$WP_ADMIN_USER" \
-    --admin_password="$WP_ADMIN_PASS" \
-    --admin_email="$WP_ADMIN_EMAIL"
+  # WP-CLI
+  if ! command -v wp &> /dev/null; then
+    log "Installing WP-CLI..."
+    curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+    chmod +x wp-cli.phar
+    mv wp-cli.phar /usr/local/bin/wp
+  fi
 else
-  warn "WordPress already installed, skipping..."
+  log "Skipping system dependencies (--skip-deps)"
 fi
 
-chown -R www-data:www-data "$SITE_PATH"
+# ============================================================================
+# Phase 2: Database (fresh install only)
+# ============================================================================
+
+if [ "$MODE" = "fresh" ]; then
+  log "Configuring database..."
+  mysql -e "CREATE DATABASE IF NOT EXISTS $DB_NAME;"
+  mysql -e "CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';"
+  mysql -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';"
+  mysql -e "FLUSH PRIVILEGES;"
+else
+  log "Using existing database (--existing mode)"
+fi
+
+# ============================================================================
+# Phase 3: WordPress (fresh install only)
+# ============================================================================
+
+if [ "$MODE" = "fresh" ]; then
+  log "Installing WordPress at $SITE_PATH..."
+  mkdir -p "$SITE_PATH"
+  cd "$SITE_PATH"
+
+  if [ ! -f wp-config.php ]; then
+    wp core download --allow-root
+    wp config create --allow-root \
+      --dbname="$DB_NAME" \
+      --dbuser="$DB_USER" \
+      --dbpass="$DB_PASS" \
+      --dbhost="localhost"
+    wp core install --allow-root \
+      --url="https://$SITE_DOMAIN" \
+      --title="My Site" \
+      --admin_user="$WP_ADMIN_USER" \
+      --admin_password="$WP_ADMIN_PASS" \
+      --admin_email="$WP_ADMIN_EMAIL"
+  else
+    warn "WordPress already installed, skipping..."
+  fi
+
+  chown -R www-data:www-data "$SITE_PATH"
+else
+  log "Using existing WordPress at $SITE_PATH"
+  cd "$SITE_PATH"
+fi
 
 # ============================================================================
 # Phase 4: Data Machine Plugin
@@ -142,11 +234,12 @@ wp plugin activate data-machine --allow-root --path="$SITE_PATH" || warn "Data M
 chown -R www-data:www-data "$SITE_PATH/wp-content/plugins/data-machine"
 
 # ============================================================================
-# Phase 5: Nginx Configuration
+# Phase 5: Nginx Configuration (fresh install only)
 # ============================================================================
 
-log "Configuring nginx..."
-cat > /etc/nginx/sites-available/$SITE_DOMAIN <<EOF
+if [ "$MODE" = "fresh" ]; then
+  log "Configuring nginx..."
+  cat > /etc/nginx/sites-available/$SITE_DOMAIN <<EOF
 server {
     listen 80;
     server_name $SITE_DOMAIN www.$SITE_DOMAIN;
@@ -168,8 +261,11 @@ server {
 }
 EOF
 
-ln -sf /etc/nginx/sites-available/$SITE_DOMAIN /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
+  ln -sf /etc/nginx/sites-available/$SITE_DOMAIN /etc/nginx/sites-enabled/
+  nginx -t && systemctl reload nginx
+else
+  log "Using existing nginx configuration (--existing mode)"
+fi
 
 # ============================================================================
 # Phase 6: OpenClaw
