@@ -24,14 +24,19 @@ This isn't "AI that can edit WordPress." This is an AI that *runs* a WordPress s
 ```
 wp-openclaw/
 ├── skills/
-│   ├── wp-openclaw-setup/     # Setup guide for AI agents
-│   ├── data-machine/          # How to use Data Machine
-│   └── wordpress/             # Official WordPress agent skills
+│   ├── wp-openclaw-setup/        # Installation guide (for local agent)
+│   ├── data-machine/             # Self-scheduling patterns
+│   └── wordpress/                # Official WordPress agent skills
 │       ├── wp-plugin-development/
 │       ├── wp-block-development/
 │       ├── wp-rest-api/
 │       └── wp-project-triage/
-├── wordpress/                  # WordPress with Data Machine plugin
+├── workspace/                    # Starter workspace files
+│   ├── BOOTSTRAP.md              # First wake-up guide
+│   ├── AGENTS.md                 # Workspace conventions
+│   ├── TOOLS.md                  # Environment-specific notes
+│   ├── MEMORY.md                 # Starter context
+│   └── memory/                   # Daily notes directory
 └── README.md
 ```
 
@@ -105,6 +110,26 @@ Official WordPress development skills:
 - **wp-block-development** — Gutenberg blocks, block.json
 - **wp-rest-api** — REST endpoints, schema, authentication
 - **wp-project-triage** — Project analysis and detection
+
+## What's Pre-Loaded
+
+When the OpenClaw agent wakes up, it has:
+
+**Skills:**
+- `data-machine` — Self-scheduling, flows, queues, Agent Ping
+- `wp-plugin-development` — Plugin architecture, hooks, settings API
+- `wp-block-development` — Gutenberg blocks, block.json, deprecations
+- `wp-rest-api` — REST endpoints, schema, authentication
+- `wp-project-triage` — Project analysis and detection
+
+**Workspace files:**
+- `BOOTSTRAP.md` — First wake-up guide (read once, delete)
+- `AGENTS.md` — Workspace conventions and rules
+- `TOOLS.md` — Environment-specific notes (starts minimal)
+- `MEMORY.md` — Starter context about the environment
+- `memory/` — Directory for daily notes
+
+The agent knows from the start that it's in a wp-openclaw environment with a WordPress site to operate.
 
 ## Requirements
 
