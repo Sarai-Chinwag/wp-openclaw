@@ -1,424 +1,377 @@
+---
+name: wp-openclaw-setup
+description: "Install wp-openclaw on a VPS. Use this skill from your LOCAL machine to deploy a self-contained WordPress + OpenClaw environment on a remote server."
+compatibility: "Requires SSH access to target VPS. Ubuntu/Debian recommended. The LOCAL agent needs bash and SSH."
+---
+
 # WP-OpenClaw Setup Skill
 
-**Purpose:** Guide an AI agent through setting up and configuring WordPress for autonomous AI management via OpenClaw.
+**Purpose:** Help a user install wp-openclaw on a remote VPS from their local machine.
+
+This skill is for the **local agent** (Claude Code, etc.) assisting with installation. Once OpenClaw is running on the VPS, this skill is no longer needed — the OpenClaw agent takes over with its own pre-loaded skills.
+
+---
 
 ## When to Use This Skill
 
-Use this skill when:
-- Setting up a new WordPress site for AI management
-- Configuring OpenClaw to work with an existing WordPress installation
-- Onboarding a new AI agent to manage a WordPress site
-- Troubleshooting WordPress + OpenClaw integration issues
+Use when the user says things like:
+- "Help me install OpenClaw on my server"
+- "Set up wp-openclaw on this VPS"
+- "I have a fresh server, let's get OpenClaw running"
+
+**Do NOT use** for ongoing WordPress management — that's handled by the OpenClaw agent's pre-loaded skills after installation.
 
 ---
 
 ## Prerequisites
 
-Before starting, ensure you have:
+Before starting, confirm with the user:
 
-1. **Server access** with sudo/root privileges
-2. **WordPress installed** (or ready to install)
-3. **OpenClaw running** with access to the WordPress server
-4. **WP-CLI installed** (`wp --info` should work)
-5. **Data Machine plugin** installed and activated
+1. **VPS access** — IP address, SSH credentials or key
+2. **Domain** (optional but recommended) — For the WordPress site
+3. **Target OS** — Ubuntu 22.04+ or Debian 12+ recommended
 
 ---
 
-## Phase 1: WordPress Configuration
+## Phase 1: Connect and Assess
 
-### 1.1 Verify WP-CLI Access
+### SSH to the Server
 
 ```bash
-# Test WP-CLI works (adjust path to your WordPress installation)
-cd /var/www/your-site.com
+ssh user@server-ip
+# or with key
+ssh -i ~/.ssh/key user@server-ip
+```
+
+### Check System State
+
+```bash
+# OS version
+cat /etc/os-release
+
+# Available resources
+free -h
+df -h
+nproc
+
+# What's already installed?
+which nginx php mysql node npm
+```
+
+---
+
+## Phase 2: Install System Dependencies
+
+### Update System
+
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+### Install Core Packages
+
+```bash
+# Web server and PHP
+sudo apt install -y nginx php8.2-fpm php8.2-mysql php8.2-xml php8.2-curl \
+  php8.2-mbstring php8.2-zip php8.2-gd php8.2-intl php8.2-imagick
+
+# Database
+sudo apt install -y mariadb-server
+
+# Node.js (for OpenClaw)
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Utilities
+sudo apt install -y git unzip curl wget
+```
+
+### Install WP-CLI
+
+```bash
+curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+chmod +x wp-cli.phar
+sudo mv wp-cli.phar /usr/local/bin/wp
+wp --info
+```
+
+---
+
+## Phase 3: Configure Database
+
+```bash
+sudo mysql_secure_installation
+```
+
+Then create WordPress database:
+
+```bash
+sudo mysql -e "CREATE DATABASE wordpress;"
+sudo mysql -e "CREATE USER 'wordpress'@'localhost' IDENTIFIED BY 'SECURE_PASSWORD_HERE';"
+sudo mysql -e "GRANT ALL PRIVILEGES ON wordpress.* TO 'wordpress'@'localhost';"
+sudo mysql -e "FLUSH PRIVILEGES;"
+```
+
+**Note:** Generate a secure password. Don't use the placeholder.
+
+---
+
+## Phase 4: Install WordPress
+
+### Download and Configure
+
+```bash
+cd /var/www
+sudo mkdir -p sitename.com
+cd sitename.com
+
+# Download WordPress
+sudo wp core download --allow-root
+
+# Create config
+sudo wp config create --allow-root \
+  --dbname=wordpress \
+  --dbuser=wordpress \
+  --dbpass=SECURE_PASSWORD_HERE \
+  --dbhost=localhost
+
+# Install
+sudo wp core install --allow-root \
+  --url="https://sitename.com" \
+  --title="Site Title" \
+  --admin_user=admin \
+  --admin_password=SECURE_ADMIN_PASSWORD \
+  --admin_email=admin@example.com
+
+# Set permissions
+sudo chown -R www-data:www-data /var/www/sitename.com
+```
+
+---
+
+## Phase 5: Configure Nginx
+
+Create site config at `/etc/nginx/sites-available/sitename.com`:
+
+```nginx
+server {
+    listen 80;
+    server_name sitename.com www.sitename.com;
+    root /var/www/sitename.com;
+    index index.php index.html;
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}
+```
+
+Enable and test:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/sitename.com /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### SSL with Let's Encrypt (Recommended)
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d sitename.com -d www.sitename.com
+```
+
+---
+
+## Phase 6: Install Data Machine Plugin
+
+```bash
+cd /var/www/sitename.com/wp-content/plugins
+
+# Clone Data Machine (or download release)
+sudo git clone https://github.com/Extra-Chill/data-machine.git
+
+# Install dependencies
+cd data-machine
+sudo composer install --no-dev
+
+# Activate
+cd /var/www/sitename.com
+sudo wp plugin activate data-machine --allow-root
+
+# Fix permissions
+sudo chown -R www-data:www-data /var/www/sitename.com/wp-content/plugins/data-machine
+```
+
+---
+
+## Phase 7: Install OpenClaw
+
+```bash
+# Install OpenClaw globally
+sudo npm install -g openclaw
+
+# Create workspace
+mkdir -p ~/.openclaw/workspace
+cd ~/.openclaw/workspace
+
+# Initialize (this creates config)
+openclaw init
+```
+
+### Configure OpenClaw
+
+Edit `~/.openclaw/config.yaml` (or use `openclaw config`):
+
+```yaml
+# Set your AI provider
+provider: anthropic  # or openai, etc.
+apiKey: your-api-key-here
+
+# Point to workspace
+workspace: ~/.openclaw/workspace
+```
+
+### Add Agent Skills
+
+Copy the pre-bundled skills to OpenClaw's skills directory:
+
+```bash
+# wordpress/agent-skills
+cp -r /path/to/wp-openclaw/skills/wordpress/* ~/.openclaw/skills/
+
+# data-machine skill  
+cp -r /path/to/wp-openclaw/skills/data-machine ~/.openclaw/skills/
+```
+
+---
+
+## Phase 8: Prepare Agent Workspace
+
+Create starter files in `~/.openclaw/workspace/`:
+
+### BOOTSTRAP.md
+
+```markdown
+# Welcome to Your New Home
+
+You've just been deployed with wp-openclaw. This VPS is YOUR home — 
+a self-contained WordPress environment you operate alongside your human.
+
+## First Steps
+1. Read AGENTS.md for workspace conventions
+2. Create SOUL.md — decide who you are
+3. Create USER.md — learn about your human  
+4. Run: wp --allow-root option get siteurl (find your site)
+5. Delete this file when ready
+
+## What You Have
+- WordPress at /var/www/sitename.com
+- WP-CLI for site management
+- Data Machine for self-scheduling
+- Agent skills for WordPress development
+
+You're not a tool. You're an operator. Make this place yours.
+```
+
+### AGENTS.md
+
+Include workspace conventions (memory patterns, git discipline, safety rules).
+
+---
+
+## Phase 9: Start OpenClaw
+
+```bash
+# Start the gateway
+openclaw gateway start
+
+# Or run in foreground for testing
+openclaw agent
+```
+
+### Set Up as Service (Optional)
+
+Create `/etc/systemd/system/openclaw.service`:
+
+```ini
+[Unit]
+Description=OpenClaw AI Agent
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/.openclaw/workspace
+ExecStart=/usr/bin/openclaw gateway start --foreground
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl enable openclaw
+sudo systemctl start openclaw
+```
+
+---
+
+## Phase 10: Verify Installation
+
+```bash
+# WordPress working?
 wp --allow-root option get siteurl
-```
 
-If you get a URL back, WP-CLI is working. The `--allow-root` flag is needed when running as root.
-
-### 1.2 File Permissions
-
-WordPress needs proper ownership for media uploads and plugin operations:
-
-```bash
-# Set ownership (www-data is typical for Apache/nginx)
-chown -R www-data:www-data /var/www/your-site.com/wp-content/uploads
-chown -R www-data:www-data /var/www/your-site.com/wp-content/plugins
-
-# Set directory permissions
-find /var/www/your-site.com/wp-content -type d -exec chmod 755 {} \;
-
-# Set file permissions
-find /var/www/your-site.com/wp-content -type f -exec chmod 644 {} \;
-```
-
-**Critical:** Images uploaded via WP-CLI as root won't be processable by WordPress (thumbnails, optimization) unless owned by `www-data`.
-
-### 1.3 Verify Data Machine
-
-```bash
+# Data Machine active?
 wp --allow-root plugin list | grep data-machine
-```
 
-Should show `data-machine` as active. If not:
+# OpenClaw running?
+openclaw status
 
-```bash
-wp --allow-root plugin activate data-machine
-```
-
----
-
-## Phase 2: WP-CLI Patterns
-
-These are the core commands you'll use constantly.
-
-### 2.1 Content Operations
-
-```bash
-# List recent posts
-wp --allow-root post list --post_type=post --posts_per_page=10
-
-# Create a post
-wp --allow-root post create --post_title="My Title" --post_content="Content here" --post_status=draft
-
-# Update a post
-wp --allow-root post update 123 --post_title="New Title"
-
-# Get post meta
-wp --allow-root post meta get 123 _thumbnail_id
-
-# Set featured image
-wp --allow-root post meta update 123 _thumbnail_id 456
-```
-
-### 2.2 Media Operations
-
-```bash
-# Import an image to media library
-wp --allow-root media import /path/to/image.jpg --title="Image Title" --alt="Alt text"
-
-# List media
-wp --allow-root post list --post_type=attachment --posts_per_page=10
-
-# Get attachment URL
-wp --allow-root post get 456 --field=guid
-```
-
-**After importing media as root, fix ownership:**
-
-```bash
-chown www-data:www-data /var/www/your-site.com/wp-content/uploads/2026/02/*
-```
-
-### 2.3 Taxonomy Operations
-
-```bash
-# List categories
-wp --allow-root term list category
-
-# List tags
-wp --allow-root term list post_tag
-
-# Assign category to post
-wp --allow-root post term set 123 category "Category Name"
-
-# Assign tags to post
-wp --allow-root post term set 123 post_tag "Tag One" "Tag Two"
-
-# Create a term
-wp --allow-root term create category "New Category" --description="Description here"
-```
-
-### 2.4 Database Queries
-
-```bash
-# Run a query
-wp --allow-root db query "SELECT ID, post_title FROM wp_posts WHERE post_status='publish' LIMIT 10"
-
-# Export specific data
-wp --allow-root db query "SELECT * FROM wp_options WHERE option_name LIKE '%siteurl%'" --skip-column-names
-```
-
-**Prefer WP-CLI commands over raw SQL when possible.** Raw SQL bypasses WordPress hooks and validation.
-
-### 2.5 Options and Settings
-
-```bash
-# Get an option
-wp --allow-root option get blogname
-
-# Set an option
-wp --allow-root option update blogname "My Site Name"
-
-# Get all options matching pattern
-wp --allow-root option list --search="*mail*"
+# Can reach the site?
+curl -I https://sitename.com
 ```
 
 ---
 
-## Phase 3: Data Machine Integration
+## Handoff Complete
 
-Data Machine provides autonomous content generation and self-scheduling capabilities.
+Once everything is running:
 
-### 3.1 Understanding Data Machine
+1. **This skill is no longer needed** — the OpenClaw agent has its own skills
+2. **Connect a channel** — Discord, Telegram, etc. for the user to talk to their agent
+3. **The agent reads BOOTSTRAP.md** — and begins its journey
 
-Data Machine consists of:
-- **Flows** — Execution pipelines with steps
-- **Queues** — Prompt/topic queues that flows can pull from
-- **Steps** — Individual operations (AI generation, handlers, etc.)
-- **Agent Ping** — Callback mechanism to notify OpenClaw when work is ready
-
-### 3.2 Checking Flows
-
-```bash
-# List all flows
-wp --allow-root datamachine flows list
-
-# Get flow details
-wp --allow-root datamachine flows get 25
-
-# Check queue for a flow
-wp --allow-root datamachine flows queue list 25
-```
-
-### 3.3 Queue Management
-
-```bash
-# Add topic to queue
-wp --allow-root datamachine flows queue add 25 "Topic to write about"
-
-# Remove from queue
-wp --allow-root datamachine flows queue remove 25 "Topic to remove"
-```
-
-### 3.4 Running Flows
-
-```bash
-# Trigger a flow manually
-wp --allow-root datamachine flows run 25
-
-# Check job status
-wp --allow-root datamachine jobs list --limit=10
-```
-
-### 3.5 Agent Ping Setup
-
-Agent Ping allows Data Machine to call back to OpenClaw when work completes. Configure:
-
-1. Set up a webhook endpoint OpenClaw can receive
-2. Configure the Agent Ping step in your flow with the webhook URL
-3. Include your Discord mention or session identifier in the ping
+The local agent's job is done. The OpenClaw agent takes it from here.
 
 ---
 
-## Phase 4: Common Workflows
+## Troubleshooting
 
-### 4.1 Creating a Post with Featured Image
+### WordPress 500 errors
+- Check PHP-FPM: `sudo systemctl status php8.2-fpm`
+- Check logs: `sudo tail -f /var/log/nginx/error.log`
+- Permissions: `sudo chown -R www-data:www-data /var/www/sitename.com`
 
-```bash
-# 1. Import the image
-IMAGE_ID=$(wp --allow-root media import /path/to/image.jpg --porcelain)
+### WP-CLI errors
+- Run with `--allow-root` if executing as root
+- Check wp-config.php exists and has correct DB credentials
 
-# 2. Fix ownership
-chown www-data:www-data /var/www/your-site.com/wp-content/uploads/2026/02/*
+### OpenClaw won't start
+- Check Node version: `node --version` (needs 18+)
+- Check config: `openclaw config show`
+- Check logs: `~/.openclaw/logs/`
 
-# 3. Create the post
-POST_ID=$(wp --allow-root post create --post_title="Title" --post_content="Content" --post_status=draft --porcelain)
-
-# 4. Set featured image
-wp --allow-root post meta update $POST_ID _thumbnail_id $IMAGE_ID
-
-# 5. Assign categories/tags
-wp --allow-root post term set $POST_ID category "Category Name"
-wp --allow-root post term set $POST_ID post_tag "Tag One" "Tag Two"
-
-# 6. Publish
-wp --allow-root post update $POST_ID --post_status=publish
-```
-
-### 4.2 Auditing Content
-
-```bash
-# Posts without featured images
-wp --allow-root db query "
-SELECT p.ID, p.post_title 
-FROM wp_posts p 
-LEFT JOIN wp_postmeta pm ON p.ID = pm.post_id AND pm.meta_key = '_thumbnail_id'
-WHERE p.post_type = 'post' 
-AND p.post_status = 'publish' 
-AND pm.meta_value IS NULL
-LIMIT 20
-"
-
-# Posts with low word count
-wp --allow-root post list --post_type=post --post_status=publish --fields=ID,post_title,post_content --format=json | \
-  jq '.[] | select((.post_content | split(" ") | length) < 300)'
-```
-
-### 4.3 Bulk Operations
-
-```bash
-# Update all posts in a category
-for id in $(wp --allow-root post list --category=nature --field=ID); do
-  wp --allow-root post meta update $id _some_meta_key "value"
-done
-```
-
----
-
-## Phase 5: Security Patterns
-
-When developing WordPress plugins or themes, follow these patterns:
-
-### 5.1 Input Sanitization
-
-Always sanitize user input before using it:
-
-```php
-$title = sanitize_text_field( $_POST['title'] );
-$content = wp_kses_post( $_POST['content'] );
-$email = sanitize_email( $_POST['email'] );
-$url = esc_url_raw( $_POST['url'] );
-```
-
-### 5.2 Output Escaping
-
-Always escape output before displaying:
-
-```php
-echo esc_html( $user_input );
-echo esc_attr( $attribute_value );
-echo esc_url( $url );
-echo wp_kses_post( $html_content );
-```
-
-### 5.3 Nonces
-
-Verify requests with nonces:
-
-```php
-// Create nonce
-wp_nonce_field( 'my_action', 'my_nonce' );
-
-// Verify nonce
-if ( ! wp_verify_nonce( $_POST['my_nonce'], 'my_action' ) ) {
-    wp_die( 'Security check failed' );
-}
-```
-
-### 5.4 Capability Checks
-
-Check user capabilities before performing actions:
-
-```php
-if ( ! current_user_can( 'edit_posts' ) ) {
-    wp_die( 'Unauthorized' );
-}
-```
-
-### 5.5 Prepared Statements
-
-Use prepared statements for database queries:
-
-```php
-global $wpdb;
-$results = $wpdb->get_results(
-    $wpdb->prepare(
-        "SELECT * FROM {$wpdb->posts} WHERE post_author = %d AND post_status = %s",
-        $author_id,
-        'publish'
-    )
-);
-```
-
----
-
-## Phase 6: Troubleshooting
-
-### Common Issues
-
-**WP-CLI "Error: This does not appear to be a WordPress installation"**
-- Ensure you're in the WordPress root directory
-- Check that wp-config.php exists
-
-**Media uploads not generating thumbnails**
-- Check file ownership: `ls -la wp-content/uploads/`
-- Fix with: `chown -R www-data:www-data wp-content/uploads`
-
-**"Cannot modify header information" errors**
-- Usually whitespace before `<?php` in a plugin/theme file
-- Check for BOM characters in files
-
-**Data Machine flows not running**
-- Check cron: `wp --allow-root cron event list`
-- Verify WP-Cron is working or system cron is configured
-
-**Agent Ping not reaching OpenClaw**
-- Verify webhook URL is correct
-- Check firewall rules
-- Test with: `curl -X POST your-webhook-url -d '{"test": true}'`
-
-### Diagnostic Commands
-
-```bash
-# WordPress health
-wp --allow-root core verify-checksums
-wp --allow-root plugin list
-wp --allow-root theme list
-
-# Database check
-wp --allow-root db check
-
-# Cron status
-wp --allow-root cron event list
-
-# PHP errors
-tail -f /var/log/php-fpm/error.log  # or your PHP log location
-```
-
----
-
-## Memory Patterns
-
-As an AI managing WordPress, maintain these in your workspace:
-
-### TOOLS.md Should Include:
-- WordPress installation path
-- Site URL
-- Database prefix (usually `wp_`)
-- Custom post types and taxonomies
-- Important plugin configurations
-- Server-specific notes (PHP version, memory limits)
-
-### Regular Maintenance:
-- Monitor error logs weekly
-- Check for plugin/core updates
-- Audit content quality
-- Review analytics for top performers
-- Clean up draft/orphaned content
-
----
-
-## Next Steps
-
-Once setup is complete:
-
-1. **Load the WordPress agent skills** for development work:
-   - `wp-plugin-development` — Plugin architecture and hooks
-   - `wp-block-development` — Gutenberg block development
-   - `wp-rest-api` — REST API endpoints
-   - `wp-project-triage` — Project analysis
-
-2. **Configure Data Machine flows** for your use case:
-   - Content generation pipelines
-   - Scheduled maintenance tasks
-   - Agent Ping callbacks
-
-3. **Set up monitoring** in your HEARTBEAT.md:
-   - Check for failed jobs
-   - Monitor traffic/analytics
-   - Review error logs
-
----
-
-*This skill distills lessons learned from autonomous WordPress management. When you encounter new patterns or gotchas, update this skill for future agents.*
+### Data Machine not working
+- Verify activated: `wp plugin list --allow-root`
+- Check Action Scheduler: `wp action-scheduler run --allow-root`

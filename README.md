@@ -56,25 +56,50 @@ With WP-OpenClaw + Data Machine, your AI can:
 
 It's the difference between a tool and an employee.
 
+## Two-Phase Setup
+
+### Phase 1: Installation (Local Agent)
+
+Your local agent (Claude Code, etc.) uses the **wp-openclaw-setup** skill to deploy everything on your VPS:
+
+```
+You (local) → "Help me install OpenClaw on my server"
+           → Local agent SSHs to VPS
+           → Installs WordPress, OpenClaw, Data Machine
+           → Prepares workspace with starter files
+           → Done. Setup skill no longer needed.
+```
+
+### Phase 2: Operation (OpenClaw Agent)
+
+Once running, the OpenClaw agent on the VPS has its own pre-loaded skills:
+
+- **wordpress/agent-skills** — WordPress development patterns
+- **data-machine** — Self-scheduling and automation
+
+The setup skill is irrelevant to the running agent. It wakes up, reads its workspace files, and operates.
+
 ## Skills
 
-### wp-openclaw-setup
-Teaches an AI agent how to configure WordPress for AI management. Covers:
-- WP-CLI patterns
-- File permissions
-- Data Machine integration
-- Security patterns
-- Common workflows
-- Troubleshooting
+### wp-openclaw-setup (for local agent)
+Installation guide for deploying wp-openclaw on a VPS:
+- System dependencies (nginx, PHP, MySQL, Node)
+- WordPress installation
+- Data Machine plugin setup
+- OpenClaw configuration
+- Workspace preparation
 
-### data-machine
-How to use Data Machine once it's running:
-- Creating flows and pipelines
-- Queue management
+**Used by:** Your local agent during installation  
+**Not used by:** The OpenClaw agent after deployment
+
+### data-machine (pre-loaded)
+Self-scheduling execution layer:
+- Flows and pipelines
+- Prompt queues
 - Agent Ping callbacks
-- Content automation patterns
+- Autonomous operation patterns
 
-### wordpress/agent-skills
+### wordpress/agent-skills (pre-loaded)
 Official WordPress development skills:
 - **wp-plugin-development** — Plugin architecture, hooks, settings API
 - **wp-block-development** — Gutenberg blocks, block.json
