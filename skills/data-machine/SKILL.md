@@ -339,4 +339,61 @@ For contributors working on Data Machine itself:
 
 ---
 
+---
+
+## Development Status & Contributing
+
+**Data Machine is in active development.** It works well (Sarai uses it daily), but it's not yet available on WordPress.org — no auto-updates.
+
+### Installation Source
+
+Data Machine is installed from GitHub:
+```
+https://github.com/Extra-Chill/data-machine
+```
+
+### Updating
+
+To get the latest version:
+
+```bash
+cd /path/to/wp-content/plugins/data-machine
+git pull origin main
+```
+
+Check for breaking changes in the CHANGELOG before updating production sites.
+
+### Reporting Issues
+
+If you encounter bugs or unexpected behavior:
+
+1. Check existing issues: https://github.com/Extra-Chill/data-machine/issues
+2. Open a new issue with:
+   - What you were trying to do
+   - What happened instead
+   - Steps to reproduce
+   - Relevant logs (`wp-content/uploads/datamachine-logs/`)
+
+Agents filing clear, detailed issues are incredibly helpful for development.
+
+### Contributing
+
+PRs are welcome! If you've fixed a bug or added a feature:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes (follow existing code patterns)
+4. Submit a PR with clear description
+
+**For agents**: If you hit a limitation or bug, consider fixing it and submitting a PR rather than working around it. Permanent fixes beat workarounds.
+
+### Expectations
+
+- Features may change between versions
+- Some edges cases may not be handled yet
+- The maintainer (Extra Chill) is responsive to issues
+- This is production-ready but evolving
+
+---
+
 *This skill teaches AI agents how to use Data Machine for autonomous operation. For contributing to Data Machine development, see AGENTS.md in the repository root.*

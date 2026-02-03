@@ -29,6 +29,7 @@ info() { echo -e "${BLUE}[wp-openclaw]${NC} $1"; }
 
 MODE="fresh"
 SKIP_DEPS=false
+INSTALL_DATA_MACHINE=true
 SHOW_HELP=false
 
 while [[ $# -gt 0 ]]; do
@@ -39,6 +40,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-deps)
       SKIP_DEPS=true
+      shift
+      ;;
+    --no-data-machine)
+      INSTALL_DATA_MACHINE=false
       shift
       ;;
     --help|-h)
@@ -59,9 +64,10 @@ if [ "$SHOW_HELP" = true ]; then
   echo "  Existing WordPress: EXISTING_WP=/var/www/mysite ./setup.sh --existing"
   echo ""
   echo "OPTIONS:"
-  echo "  --existing     Add OpenClaw to existing WordPress (skip WP install)"
-  echo "  --skip-deps    Skip apt package installation"
-  echo "  --help, -h     Show this help"
+  echo "  --existing         Add OpenClaw to existing WordPress (skip WP install)"
+  echo "  --no-data-machine  Skip Data Machine plugin (simpler setup, no self-scheduling)"
+  echo "  --skip-deps        Skip apt package installation"
+  echo "  --help, -h         Show this help"
   echo ""
   echo "ENVIRONMENT VARIABLES:"
   echo "  SITE_DOMAIN    Domain for fresh install (default: example.com)"
@@ -215,23 +221,27 @@ else
 fi
 
 # ============================================================================
-# Phase 4: Data Machine Plugin
+# Phase 4: Data Machine Plugin (optional)
 # ============================================================================
 
-log "Installing Data Machine plugin..."
-cd "$SITE_PATH/wp-content/plugins"
+if [ "$INSTALL_DATA_MACHINE" = true ]; then
+  log "Installing Data Machine plugin..."
+  cd "$SITE_PATH/wp-content/plugins"
 
-if [ ! -d data-machine ]; then
-  git clone https://github.com/Extra-Chill/data-machine.git
-  cd data-machine
-  if [ -f composer.json ]; then
-    composer install --no-dev --no-interaction 2>/dev/null || warn "Composer not found, skipping dependencies"
+  if [ ! -d data-machine ]; then
+    git clone https://github.com/Extra-Chill/data-machine.git
+    cd data-machine
+    if [ -f composer.json ]; then
+      composer install --no-dev --no-interaction 2>/dev/null || warn "Composer not found, skipping dependencies"
+    fi
+    cd ..
   fi
-  cd ..
-fi
 
-wp plugin activate data-machine --allow-root --path="$SITE_PATH" || warn "Data Machine may already be active"
-chown -R www-data:www-data "$SITE_PATH/wp-content/plugins/data-machine"
+  wp plugin activate data-machine --allow-root --path="$SITE_PATH" || warn "Data Machine may already be active"
+  chown -R www-data:www-data "$SITE_PATH/wp-content/plugins/data-machine"
+else
+  log "Skipping Data Machine (--no-data-machine)"
+fi
 
 # ============================================================================
 # Phase 5: Nginx Configuration (fresh install only)
@@ -281,8 +291,12 @@ mkdir -p /root/.openclaw/skills
 # Copy skills if we have them
 if [ -d "$SCRIPT_DIR/skills" ]; then
   log "Copying skills..."
-  cp -r "$SCRIPT_DIR/skills/data-machine" /root/.openclaw/skills/ 2>/dev/null || true
+  # Always copy WordPress skills
   cp -r "$SCRIPT_DIR/skills/wordpress/"* /root/.openclaw/skills/ 2>/dev/null || true
+  # Only copy Data Machine skill if plugin was installed
+  if [ "$INSTALL_DATA_MACHINE" = true ]; then
+    cp -r "$SCRIPT_DIR/skills/data-machine" /root/.openclaw/skills/ 2>/dev/null || true
+  fi
 fi
 
 # Copy workspace files if we have them
@@ -343,6 +357,11 @@ echo ""
 echo "OpenClaw:"
 echo "  Workspace: $OPENCLAW_WORKSPACE"
 echo "  Skills:    /root/.openclaw/skills/"
+if [ "$INSTALL_DATA_MACHINE" = true ]; then
+  echo "  Data Machine: Installed (autonomous operation enabled)"
+else
+  echo "  Data Machine: Not installed (simple setup)"
+fi
 echo ""
 
 # Save credentials for reference
@@ -359,6 +378,8 @@ WP_ADMIN_PASS=$WP_ADMIN_PASS
 DB_NAME=$DB_NAME
 DB_USER=$DB_USER
 DB_PASS=$DB_PASS
+
+DATA_MACHINE=$INSTALL_DATA_MACHINE
 CREDS
 chmod 600 "$OPENCLAW_WORKSPACE/.credentials"
 log "Credentials saved to $OPENCLAW_WORKSPACE/.credentials"

@@ -12,33 +12,89 @@ This skill is for the **local agent** (Claude Code, etc.) assisting with install
 
 ---
 
-## FIRST: Ask the User About Their Situation
+## FIRST: Interview the User
 
-Before proceeding, determine which scenario applies:
+**Do NOT proceed with installation until you've asked these questions and gotten answers.**
 
-### Scenario A: Fresh Install
-> "I want a new WordPress site managed by OpenClaw"
+### Question 1: Installation Type
 
-- Fresh VPS, nothing installed yet
-- Use: `SITE_DOMAIN=example.com ./setup.sh`
+> "Are you setting up a **fresh WordPress site**, or do you have an **existing WordPress site** you want to add OpenClaw to?"
 
-### Scenario B: Existing WordPress (Same Server)
-> "I have a WordPress site and want to add OpenClaw to it"
+**Options:**
+- **Fresh install** — New VPS, new WordPress site
+- **Existing WordPress** — Site already running, just add OpenClaw
+- **Migration** — Site exists elsewhere, moving to this VPS
 
-- WordPress already running
-- Use: `EXISTING_WP=/var/www/mysite ./setup.sh --existing`
+### Question 2: Autonomous Operation
 
-### Scenario C: Migration to New VPS
-> "I have a WordPress site elsewhere and want to move it to an OpenClaw-managed VPS"
+> "Do you want **autonomous operation** capabilities? This includes Data Machine — a self-scheduling system that lets your agent set reminders, queue tasks, and operate 24/7 without human intervention.
+>
+> - **Yes (recommended for content sites)** — Full autonomy, self-scheduling, proactive operation
+> - **No (simpler setup)** — Agent responds when asked, no self-scheduling overhead"
 
-This is a two-step process:
-1. Export from old server, import to new VPS
-2. Run setup with `--existing`
+**Explain the tradeoff:**
+- Data Machine is powerful but adds complexity
+- For simple personal sites that rarely need agent help, it may be overkill
+- For content sites, blogs, or anything benefiting from automation, it's essential
 
-**Ask the user:**
-- Do you have an existing WordPress site?
-- Is it on this server or do you need to migrate it?
-- What's the domain?
+### Question 3: Server Details
+
+> "I'll need some details about your server:
+> 1. What's the **server IP address**?
+> 2. Do you have **SSH access**? (key or password)
+> 3. What **domain** will this site use?"
+
+### Question 4: For Existing WordPress
+
+If they chose existing WordPress:
+
+> "Where is WordPress installed on the server? (e.g., `/var/www/mysite`)"
+
+---
+
+## Build the Command
+
+Based on their answers, construct the appropriate command:
+
+### Fresh Install + Data Machine (Full Autonomy)
+```bash
+SITE_DOMAIN=example.com ./setup.sh
+```
+
+### Fresh Install, No Data Machine (Simple)
+```bash
+SITE_DOMAIN=example.com ./setup.sh --no-data-machine
+```
+
+### Existing WordPress + Data Machine
+```bash
+EXISTING_WP=/var/www/mysite ./setup.sh --existing
+```
+
+### Existing WordPress, No Data Machine
+```bash
+EXISTING_WP=/var/www/mysite ./setup.sh --existing --no-data-machine
+```
+
+### With Skip Dependencies (if already installed)
+Add `--skip-deps` if nginx, PHP, MySQL, Node are already installed.
+
+---
+
+## Confirm Before Proceeding
+
+Before running anything, summarize what you're about to do:
+
+> "Here's the plan:
+> - **Server:** 123.45.67.89
+> - **Domain:** example.com
+> - **Type:** Fresh install
+> - **Data Machine:** Yes (autonomous operation enabled)
+> - **Command:** `SITE_DOMAIN=example.com ./setup.sh`
+>
+> Does this look right? Ready to proceed?"
+
+Only continue after explicit confirmation.
 
 ---
 
