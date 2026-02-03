@@ -225,7 +225,7 @@ systemctl daemon-reload
 systemctl enable openclaw
 
 # ============================================================================
-# Done!
+# Done! Summary + Handoff
 # ============================================================================
 
 echo ""
@@ -246,14 +246,77 @@ echo "  Password: $DB_PASS"
 echo ""
 echo "OpenClaw:"
 echo "  Workspace: $OPENCLAW_WORKSPACE"
-echo "  Start:     systemctl start openclaw"
-echo "  Status:    openclaw status"
+echo "  Skills:    /root/.openclaw/skills/"
 echo ""
-echo "Next steps:"
-echo "  1. Point your domain DNS to this server"
-echo "  2. Run: certbot --nginx -d $SITE_DOMAIN"
-echo "  3. Configure OpenClaw: openclaw configure"
-echo "  4. Start the gateway: systemctl start openclaw"
+
+# Save credentials for reference
+cat > "$OPENCLAW_WORKSPACE/.credentials" <<CREDS
+# wp-openclaw credentials (keep this secure!)
+# Generated: $(date)
+
+SITE_DOMAIN=$SITE_DOMAIN
+SITE_PATH=$SITE_PATH
+
+WP_ADMIN_USER=$WP_ADMIN_USER
+WP_ADMIN_PASS=$WP_ADMIN_PASS
+
+DB_NAME=$DB_NAME
+DB_USER=$DB_USER
+DB_PASS=$DB_PASS
+CREDS
+chmod 600 "$OPENCLAW_WORKSPACE/.credentials"
+log "Credentials saved to $OPENCLAW_WORKSPACE/.credentials"
+
 echo ""
-echo "Your agent will wake up and read BOOTSTRAP.md."
+echo "=============================================="
+echo "Next: Configure OpenClaw"
+echo "=============================================="
+echo ""
+echo "OpenClaw needs API credentials and a channel to communicate."
+echo ""
+
+# Check if running interactively
+if [ -t 0 ]; then
+  read -p "Configure OpenClaw now? [Y/n] " -n 1 -r
+  echo
+  if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+    log "Starting OpenClaw configuration..."
+    openclaw configure
+    
+    echo ""
+    read -p "Start the OpenClaw gateway now? [Y/n] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+      log "Starting OpenClaw gateway..."
+      systemctl start openclaw
+      sleep 2
+      systemctl status openclaw --no-pager
+      echo ""
+      echo -e "${GREEN}Your agent is waking up!${NC}"
+      echo "It will read BOOTSTRAP.md and begin its journey."
+    else
+      echo ""
+      echo "To start later: systemctl start openclaw"
+    fi
+  else
+    echo ""
+    echo "To configure later:"
+    echo "  openclaw configure"
+    echo "  systemctl start openclaw"
+  fi
+else
+  # Non-interactive mode
+  echo "Run these commands to complete setup:"
+  echo "  1. openclaw configure    # Set up API keys and channels"
+  echo "  2. systemctl start openclaw"
+  echo ""
+  echo "Your agent will wake up and read BOOTSTRAP.md."
+fi
+
+echo ""
+echo "=============================================="
+echo "DNS Reminder"
+echo "=============================================="
+echo "Point your domain to this server's IP, then run:"
+echo "  certbot --nginx -d $SITE_DOMAIN"
 echo "=============================================="
