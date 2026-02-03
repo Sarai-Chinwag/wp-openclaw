@@ -52,7 +52,7 @@ wp-openclaw/
    SITE_DOMAIN=yourdomain.com ./setup.sh
    ```
 
-   Or have your local agent (Claude Code, etc.) use the `wp-openclaw-setup` skill to guide installation.
+   Or have your local agent (Claude Code, etc.) use the `wp-openclaw-setup` skill to guide installation — it will ask you questions to determine the right setup.
 
 3. **Configure OpenClaw:**
    ```bash
@@ -61,6 +61,42 @@ wp-openclaw/
    ```
 
 4. **Your agent wakes up** — Reads BOOTSTRAP.md, knows what it is, starts operating
+
+## Setup Options
+
+| Flag | Description |
+|------|-------------|
+| `--existing` | Add OpenClaw to existing WordPress (skip WP install) |
+| `--no-data-machine` | Skip Data Machine for simpler setup (no self-scheduling) |
+| `--skip-deps` | Skip apt package installation |
+
+### Examples
+
+```bash
+# Fresh install with full autonomy
+SITE_DOMAIN=example.com ./setup.sh
+
+# Fresh install, simple (no Data Machine)
+SITE_DOMAIN=example.com ./setup.sh --no-data-machine
+
+# Existing WordPress with full autonomy
+EXISTING_WP=/var/www/mysite ./setup.sh --existing
+
+# Existing WordPress, simple setup
+EXISTING_WP=/var/www/mysite ./setup.sh --existing --no-data-machine
+```
+
+### Data Machine: Yes or No?
+
+**Include Data Machine when:**
+- Running a content site or blog
+- You want autonomous operation (agent schedules itself)
+- You need task queues, reminders, and workflows
+
+**Skip Data Machine when:**
+- Simple personal site
+- Agent only helps when asked
+- You want minimal complexity
 
 ## The Pitch
 
