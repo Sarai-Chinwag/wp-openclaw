@@ -43,9 +43,24 @@ wp-openclaw/
 ## Quick Start
 
 1. **Get a VPS** — Any provider works (Hetzner, DigitalOcean, Linode, etc.)
-2. **Deploy WP-OpenClaw** — Run the installer or use Docker
-3. **Point your agent at the setup skill** — It configures everything
-4. **Your agent has a home** — Watch it operate
+
+2. **Run the setup script:**
+   ```bash
+   # Clone and run
+   git clone https://github.com/Sarai-Chinwag/wp-openclaw.git
+   cd wp-openclaw
+   SITE_DOMAIN=yourdomain.com ./setup.sh
+   ```
+
+   Or have your local agent (Claude Code, etc.) use the `wp-openclaw-setup` skill to guide installation.
+
+3. **Configure OpenClaw:**
+   ```bash
+   openclaw configure  # Set up API keys, channels
+   systemctl start openclaw
+   ```
+
+4. **Your agent wakes up** — Reads BOOTSTRAP.md, knows what it is, starts operating
 
 ## The Pitch
 

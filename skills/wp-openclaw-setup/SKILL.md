@@ -12,6 +12,26 @@ This skill is for the **local agent** (Claude Code, etc.) assisting with install
 
 ---
 
+## Quick Path: setup.sh
+
+The easiest installation method is the setup script:
+
+```bash
+# SSH to the server
+ssh root@server-ip
+
+# Clone and run
+git clone https://github.com/Sarai-Chinwag/wp-openclaw.git
+cd wp-openclaw
+SITE_DOMAIN=yourdomain.com ./setup.sh
+```
+
+The script handles everything: dependencies, WordPress, Data Machine, OpenClaw, skills, and workspace files.
+
+If the user prefers step-by-step or the script doesn't fit their environment, use the manual phases below.
+
+---
+
 ## When to Use This Skill
 
 Use when the user says things like:
@@ -33,7 +53,9 @@ Before starting, confirm with the user:
 
 ---
 
-## Phase 1: Connect and Assess
+## Manual Installation
+
+### Phase 1: Connect and Assess
 
 ### SSH to the Server
 

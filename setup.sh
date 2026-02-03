@@ -1,0 +1,259 @@
+#!/bin/bash
+#
+# wp-openclaw setup script
+# Run this on your target VPS to install WordPress + OpenClaw + Data Machine
+#
+# Usage: curl -fsSL https://raw.githubusercontent.com/Sarai-Chinwag/wp-openclaw/main/setup.sh | bash
+#    or: git clone ... && cd wp-openclaw && ./setup.sh
+#
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+log() { echo -e "${GREEN}[wp-openclaw]${NC} $1"; }
+warn() { echo -e "${YELLOW}[wp-openclaw]${NC} $1"; }
+error() { echo -e "${RED}[wp-openclaw]${NC} $1"; exit 1; }
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+  error "Please run as root (sudo ./setup.sh)"
+fi
+
+# Detect OS
+if [ -f /etc/os-release ]; then
+  . /etc/os-release
+  OS=$ID
+else
+  error "Cannot detect OS. This script supports Ubuntu/Debian."
+fi
+
+if [[ "$OS" != "ubuntu" && "$OS" != "debian" ]]; then
+  error "This script supports Ubuntu/Debian only. Detected: $OS"
+fi
+
+log "Detected OS: $OS"
+
+# ============================================================================
+# Configuration (edit these or pass as environment variables)
+# ============================================================================
+
+SITE_DOMAIN="${SITE_DOMAIN:-example.com}"
+SITE_PATH="${SITE_PATH:-/var/www/$SITE_DOMAIN}"
+DB_NAME="${DB_NAME:-wordpress}"
+DB_USER="${DB_USER:-wordpress}"
+DB_PASS="${DB_PASS:-$(openssl rand -base64 16)}"
+WP_ADMIN_USER="${WP_ADMIN_USER:-admin}"
+WP_ADMIN_PASS="${WP_ADMIN_PASS:-$(openssl rand -base64 16)}"
+WP_ADMIN_EMAIL="${WP_ADMIN_EMAIL:-admin@$SITE_DOMAIN}"
+OPENCLAW_WORKSPACE="${OPENCLAW_WORKSPACE:-/root/.openclaw/workspace}"
+
+# Where this script lives (for copying skills/workspace)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ============================================================================
+# Phase 1: System Dependencies
+# ============================================================================
+
+log "Updating system packages..."
+apt update && apt upgrade -y
+
+log "Installing dependencies..."
+apt install -y \
+  nginx \
+  php8.2-fpm php8.2-mysql php8.2-xml php8.2-curl php8.2-mbstring \
+  php8.2-zip php8.2-gd php8.2-intl php8.2-imagick \
+  mariadb-server \
+  git unzip curl wget
+
+# Node.js
+if ! command -v node &> /dev/null; then
+  log "Installing Node.js..."
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt install -y nodejs
+fi
+
+# WP-CLI
+if ! command -v wp &> /dev/null; then
+  log "Installing WP-CLI..."
+  curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+  chmod +x wp-cli.phar
+  mv wp-cli.phar /usr/local/bin/wp
+fi
+
+# ============================================================================
+# Phase 2: Database
+# ============================================================================
+
+log "Configuring database..."
+mysql -e "CREATE DATABASE IF NOT EXISTS $DB_NAME;"
+mysql -e "CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';"
+mysql -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';"
+mysql -e "FLUSH PRIVILEGES;"
+
+# ============================================================================
+# Phase 3: WordPress
+# ============================================================================
+
+log "Installing WordPress at $SITE_PATH..."
+mkdir -p "$SITE_PATH"
+cd "$SITE_PATH"
+
+if [ ! -f wp-config.php ]; then
+  wp core download --allow-root
+  wp config create --allow-root \
+    --dbname="$DB_NAME" \
+    --dbuser="$DB_USER" \
+    --dbpass="$DB_PASS" \
+    --dbhost="localhost"
+  wp core install --allow-root \
+    --url="https://$SITE_DOMAIN" \
+    --title="My Site" \
+    --admin_user="$WP_ADMIN_USER" \
+    --admin_password="$WP_ADMIN_PASS" \
+    --admin_email="$WP_ADMIN_EMAIL"
+else
+  warn "WordPress already installed, skipping..."
+fi
+
+chown -R www-data:www-data "$SITE_PATH"
+
+# ============================================================================
+# Phase 4: Data Machine Plugin
+# ============================================================================
+
+log "Installing Data Machine plugin..."
+cd "$SITE_PATH/wp-content/plugins"
+
+if [ ! -d data-machine ]; then
+  git clone https://github.com/Extra-Chill/data-machine.git
+  cd data-machine
+  if [ -f composer.json ]; then
+    composer install --no-dev --no-interaction 2>/dev/null || warn "Composer not found, skipping dependencies"
+  fi
+  cd ..
+fi
+
+wp plugin activate data-machine --allow-root --path="$SITE_PATH" || warn "Data Machine may already be active"
+chown -R www-data:www-data "$SITE_PATH/wp-content/plugins/data-machine"
+
+# ============================================================================
+# Phase 5: Nginx Configuration
+# ============================================================================
+
+log "Configuring nginx..."
+cat > /etc/nginx/sites-available/$SITE_DOMAIN <<EOF
+server {
+    listen 80;
+    server_name $SITE_DOMAIN www.$SITE_DOMAIN;
+    root $SITE_PATH;
+    index index.php index.html;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$args;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}
+EOF
+
+ln -sf /etc/nginx/sites-available/$SITE_DOMAIN /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+
+# ============================================================================
+# Phase 6: OpenClaw
+# ============================================================================
+
+log "Installing OpenClaw..."
+npm install -g openclaw
+
+log "Setting up OpenClaw workspace..."
+mkdir -p "$OPENCLAW_WORKSPACE"
+mkdir -p /root/.openclaw/skills
+
+# Copy skills if we have them
+if [ -d "$SCRIPT_DIR/skills" ]; then
+  log "Copying skills..."
+  cp -r "$SCRIPT_DIR/skills/data-machine" /root/.openclaw/skills/ 2>/dev/null || true
+  cp -r "$SCRIPT_DIR/skills/wordpress/"* /root/.openclaw/skills/ 2>/dev/null || true
+fi
+
+# Copy workspace files if we have them
+if [ -d "$SCRIPT_DIR/workspace" ]; then
+  log "Copying workspace files..."
+  cp -r "$SCRIPT_DIR/workspace/"* "$OPENCLAW_WORKSPACE/" 2>/dev/null || true
+  mkdir -p "$OPENCLAW_WORKSPACE/memory"
+fi
+
+# Skip default bootstrap since we're providing our own
+openclaw config set agent.skipBootstrap true 2>/dev/null || true
+
+# ============================================================================
+# Phase 7: Systemd Service (optional)
+# ============================================================================
+
+log "Creating OpenClaw systemd service..."
+cat > /etc/systemd/system/openclaw.service <<EOF
+[Unit]
+Description=OpenClaw AI Agent Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$OPENCLAW_WORKSPACE
+ExecStart=/usr/bin/openclaw gateway start --foreground
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable openclaw
+
+# ============================================================================
+# Done!
+# ============================================================================
+
+echo ""
+echo "=============================================="
+echo -e "${GREEN}wp-openclaw installation complete!${NC}"
+echo "=============================================="
+echo ""
+echo "WordPress:"
+echo "  URL:      https://$SITE_DOMAIN"
+echo "  Admin:    https://$SITE_DOMAIN/wp-admin"
+echo "  Username: $WP_ADMIN_USER"
+echo "  Password: $WP_ADMIN_PASS"
+echo ""
+echo "Database:"
+echo "  Name:     $DB_NAME"
+echo "  User:     $DB_USER"
+echo "  Password: $DB_PASS"
+echo ""
+echo "OpenClaw:"
+echo "  Workspace: $OPENCLAW_WORKSPACE"
+echo "  Start:     systemctl start openclaw"
+echo "  Status:    openclaw status"
+echo ""
+echo "Next steps:"
+echo "  1. Point your domain DNS to this server"
+echo "  2. Run: certbot --nginx -d $SITE_DOMAIN"
+echo "  3. Configure OpenClaw: openclaw configure"
+echo "  4. Start the gateway: systemctl start openclaw"
+echo ""
+echo "Your agent will wake up and read BOOTSTRAP.md."
+echo "=============================================="
