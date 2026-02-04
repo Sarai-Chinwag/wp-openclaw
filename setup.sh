@@ -459,7 +459,7 @@ if [ -d "$SCRIPT_DIR/workspace" ]; then
 fi
 
 # Skip default bootstrap since we're providing our own
-run_cmd openclaw config set agent.skipBootstrap true || true
+run_cmd openclaw config set agents.defaults.skipBootstrap true || true
 
 # ============================================================================
 # Phase 7: Systemd Service (optional)
