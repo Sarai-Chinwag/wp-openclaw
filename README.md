@@ -26,11 +26,20 @@ wp-openclaw/
 ├── skills/
 │   ├── wp-openclaw-setup/        # Installation guide (for local agent)
 │   ├── data-machine/             # Self-scheduling patterns
-│   └── wordpress/                # Official WordPress agent skills
-│       ├── wp-plugin-development/
-│       ├── wp-block-development/
-│       ├── wp-rest-api/
-│       └── wp-project-triage/
+│   └── wordpress/                # ALL official WordPress agent skills (13 skills)
+│       ├── wordpress-router/     # Classifies repos, routes to workflows
+│       ├── wp-abilities-api/     # Capability-based permissions
+│       ├── wp-block-development/ # Gutenberg blocks, block.json
+│       ├── wp-block-themes/      # theme.json, templates, patterns
+│       ├── wp-interactivity-api/ # data-wp-* directives, stores
+│       ├── wp-performance/       # Profiling, caching, optimization
+│       ├── wp-phpstan/           # Static analysis for WordPress
+│       ├── wp-playground/        # Instant local environments
+│       ├── wp-plugin-development/# Plugin architecture, hooks, settings
+│       ├── wp-project-triage/    # Project analysis and detection
+│       ├── wp-rest-api/          # REST endpoints, schema, auth
+│       ├── wp-wpcli-and-ops/     # WP-CLI, automation, multisite
+│       └── wpds/                 # WordPress Design System
 ├── workspace/                    # Starter workspace files
 │   ├── BOOTSTRAP.md              # First wake-up guide
 │   ├── AGENTS.md                 # Workspace conventions
@@ -156,11 +165,23 @@ Self-scheduling execution layer:
 - Autonomous operation patterns
 
 ### wordpress/agent-skills (pre-loaded)
-Official WordPress development skills:
-- **wp-plugin-development** — Plugin architecture, hooks, settings API
-- **wp-block-development** — Gutenberg blocks, block.json
-- **wp-rest-api** — REST endpoints, schema, authentication
-- **wp-project-triage** — Project analysis and detection
+All 13 official WordPress development skills from [WordPress/agent-skills](https://github.com/WordPress/agent-skills):
+
+| Skill | What it teaches |
+|-------|-----------------|
+| **wordpress-router** | Classifies WordPress repos and routes to the right workflow |
+| **wp-abilities-api** | Capability-based permissions and REST API authentication |
+| **wp-block-development** | Gutenberg blocks: block.json, attributes, rendering, deprecations |
+| **wp-block-themes** | Block themes: theme.json, templates, patterns, style variations |
+| **wp-interactivity-api** | Frontend interactivity with data-wp-* directives and stores |
+| **wp-performance** | Profiling, caching, database optimization, Server-Timing |
+| **wp-phpstan** | PHPStan static analysis for WordPress projects |
+| **wp-playground** | WordPress Playground for instant local environments |
+| **wp-plugin-development** | Plugin architecture, hooks, settings API, security |
+| **wp-project-triage** | Detects project type, tooling, and versions automatically |
+| **wp-rest-api** | REST API routes/endpoints, schema, auth, response shaping |
+| **wp-wpcli-and-ops** | WP-CLI commands, automation, multisite, search-replace |
+| **wpds** | WordPress Design System |
 
 ## What's Pre-Loaded
 
@@ -168,10 +189,7 @@ When the OpenClaw agent wakes up, it has:
 
 **Skills:**
 - `data-machine` — Self-scheduling, flows, queues, Agent Ping
-- `wp-plugin-development` — Plugin architecture, hooks, settings API
-- `wp-block-development` — Gutenberg blocks, block.json, deprecations
-- `wp-rest-api` — REST endpoints, schema, authentication
-- `wp-project-triage` — Project analysis and detection
+- All 13 WordPress agent skills (see table above)
 
 **Workspace files:**
 - `BOOTSTRAP.md` — First wake-up guide (read once, delete)
