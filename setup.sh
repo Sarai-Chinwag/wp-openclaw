@@ -247,7 +247,7 @@ if [ "$SKIP_DEPS" = false ]; then
     PHP_PACKAGES="php-fpm php-mysql php-xml php-curl php-mbstring php-zip php-gd php-intl php-imagick"
   fi
 
-  run_cmd apt install -y nginx $PHP_PACKAGES mariadb-server git unzip curl wget
+  run_cmd apt install -y nginx $PHP_PACKAGES mariadb-server git unzip curl wget composer
 
   # Re-detect PHP version after install (in case it wasn't detected before)
   if [ -z "$PHP_VERSION" ] && command -v php &> /dev/null; then
@@ -362,7 +362,7 @@ if [ "$INSTALL_DATA_MACHINE" = true ]; then
       echo -e "${BLUE}[dry-run]${NC} cd data-machine"
     fi
     if [ -f composer.json ] || [ "$DRY_RUN" = true ]; then
-      run_cmd composer install --no-dev --no-interaction || warn "Composer not found, skipping dependencies"
+      run_cmd env COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --no-interaction || warn "Composer failed, some Data Machine features may not work"
     fi
     if [ "$DRY_RUN" = false ]; then
       cd ..
