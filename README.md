@@ -76,7 +76,7 @@ SITE_DOMAIN=example.com ./setup.sh --dry-run
 
 - **WordPress** — Pre-configured for AI management
 - **OpenClaw** — The AI agent framework
-- **Data Machine** — Self-scheduling execution layer (optional)
+- **[Data Machine](https://github.com/Extra-Chill/data-machine)** — Self-scheduling execution layer (optional)
 - **Agent Skills** — WordPress development skills
 
 ### Skill Separation
