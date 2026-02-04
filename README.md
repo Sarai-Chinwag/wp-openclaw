@@ -33,9 +33,13 @@ Your agent will:
 
 ### Manual Alternative
 
-If you prefer direct CLI:
+If you already have a VPS with SSH access:
 
 ```bash
+# SSH into your server
+ssh root@your-server-ip
+
+# Clone and run setup
 git clone https://github.com/Sarai-Chinwag/wp-openclaw.git
 cd wp-openclaw
 SITE_DOMAIN=yourdomain.com ./setup.sh
