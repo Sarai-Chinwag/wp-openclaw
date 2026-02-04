@@ -112,19 +112,19 @@ All 13 official WordPress development skills from [WordPress/agent-skills](https
 | **wp-wpcli-and-ops** | WP-CLI commands, automation, multisite |
 | **wpds** | WordPress Design System |
 
-## Simple vs Autonomous
+## With or Without Data Machine
 
 **Include Data Machine (default) when:**
-- Running a content site or blog
-- You want autonomous operation (agent schedules itself)
-- You need task queues, reminders, and workflows
+- Running a content site (blog, news, media)
+- You want automated content pipelines (fetch → process → publish)
+- Agent should orchestrate its own workflows
 
 **Skip Data Machine (`--no-data-machine`) when:**
-- Simple personal site
-- Agent only helps when asked
-- You want minimal complexity
+- Development-focused setup (coding assistance, not content)
+- Agent only needs to respond when prompted
+- No recurring content workflows
 
-With Data Machine, your agent can schedule itself to check on things, queue up work, and chain tasks together. Without it, the agent responds when prompted but doesn't self-initiate.
+Data Machine gives your agent a structured toolkit for content automation — pipelines, queues, and self-orchestrating workflows. Without it, the agent is available for on-demand assistance but lacks the infrastructure for autonomous content operations.
 
 ## Requirements
 
