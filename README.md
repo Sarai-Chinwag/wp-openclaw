@@ -75,7 +75,7 @@ SITE_DOMAIN=example.com ./setup.sh --dry-run
 ## What Gets Installed
 
 - **WordPress** — Pre-configured for AI management
-- **OpenClaw** — The AI agent framework
+- **[OpenClaw](https://github.com/openclaw/openclaw)** — The AI agent framework
 - **[Data Machine](https://github.com/Extra-Chill/data-machine)** — Self-scheduling execution layer (optional)
 - **Agent Skills** — WordPress development skills
 
