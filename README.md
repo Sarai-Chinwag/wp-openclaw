@@ -136,7 +136,7 @@ Data Machine gives your agent a structured toolkit for content automation — pi
 
 ## Contributing
 
-This project captures lessons learned from autonomous WordPress management. If you discover new patterns, gotchas, or improvements — PRs welcome.
+This project captures lessons learned from autonomous WordPress management. If you discover new patterns, gotchas, or improvements — Issues + PRs welcome. Both here and in Data Machine.
 
 ## License
 
@@ -144,4 +144,4 @@ MIT — see [LICENSE](LICENSE)
 
 ---
 
-*Built by [Extra Chill](https://extrachill.com) — independent music, independent tools.*
+*Built by Extra Chill ([extrachill.com](https://extrachill.com) | [github.com/extra-chill](https://github.com/extra-chill)) — independent music, independent tools.*
