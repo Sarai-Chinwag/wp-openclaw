@@ -50,6 +50,7 @@ write_file() {
 
 MODE="fresh"
 SKIP_DEPS=false
+SKIP_SSL=false
 INSTALL_DATA_MACHINE=true
 SHOW_HELP=false
 DRY_RUN=false
@@ -66,6 +67,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-data-machine)
       INSTALL_DATA_MACHINE=false
+      shift
+      ;;
+    --skip-ssl)
+      SKIP_SSL=true
       shift
       ;;
     --help|-h)
@@ -93,6 +98,7 @@ if [ "$SHOW_HELP" = true ]; then
   echo "  --existing         Add OpenClaw to existing WordPress (skip WP install)"
   echo "  --no-data-machine  Skip Data Machine plugin (simpler setup, no self-scheduling)"
   echo "  --skip-deps        Skip apt package installation"
+  echo "  --skip-ssl         Skip SSL/HTTPS configuration (certbot)"
   echo "  --dry-run          Print commands without executing (for testing)"
   echo "  --help, -h         Show this help"
   echo ""
@@ -104,6 +110,7 @@ if [ "$SHOW_HELP" = true ]; then
   echo "  DB_USER        Database user (fresh install only)"
   echo "  DB_PASS        Database password (fresh install only)"
   echo "  NODE_VERSION   Node.js major version to install (default: auto-detect LTS)"
+  echo "  SKIP_SSL       Skip SSL configuration (set to 'true' to skip)"
   echo ""
   echo "MIGRATION WORKFLOW:"
   echo "  1. On old server: Export database and wp-content"
@@ -430,6 +437,65 @@ else
 fi
 
 # ============================================================================
+# Phase 5.5: SSL Certificate (Let's Encrypt)
+# ============================================================================
+
+if [ "$SKIP_SSL" = true ]; then
+  log "Skipping SSL configuration (--skip-ssl or SKIP_SSL=true)"
+else
+  log "Configuring SSL certificate..."
+  
+  # Install certbot if not present
+  if ! command -v certbot &> /dev/null || [ "$DRY_RUN" = true ]; then
+    log "Installing certbot..."
+    run_cmd apt install -y certbot python3-certbot-nginx
+  fi
+  
+  # Get this server's public IP
+  if [ "$DRY_RUN" = true ]; then
+    SERVER_IP="(dry-run-ip)"
+  else
+    SERVER_IP=$(curl -s -4 ifconfig.me 2>/dev/null || curl -s -4 icanhazip.com 2>/dev/null)
+  fi
+  
+  # Resolve domain to check DNS
+  if [ "$DRY_RUN" = true ]; then
+    DOMAIN_IP="(dry-run-domain-ip)"
+  else
+    DOMAIN_IP=$(dig +short "$SITE_DOMAIN" A 2>/dev/null | head -1)
+  fi
+  
+  log "Server IP: $SERVER_IP"
+  log "Domain $SITE_DOMAIN resolves to: $DOMAIN_IP"
+  
+  if [ "$DRY_RUN" = true ]; then
+    echo -e "${BLUE}[dry-run]${NC} certbot --nginx -d $SITE_DOMAIN --non-interactive --agree-tos --email $WP_ADMIN_EMAIL"
+  elif [ "$SERVER_IP" = "$DOMAIN_IP" ]; then
+    log "DNS verified! Running certbot..."
+    
+    # Run certbot with nginx plugin (auto-configures SSL in nginx)
+    if certbot --nginx -d "$SITE_DOMAIN" --non-interactive --agree-tos --email "$WP_ADMIN_EMAIL" --redirect; then
+      log "SSL certificate installed successfully!"
+      
+      # Verify HTTPS works
+      sleep 2
+      if curl -s -o /dev/null -w "%{http_code}" "https://$SITE_DOMAIN/" | grep -q "200\|301\|302"; then
+        log "HTTPS verified working!"
+      else
+        warn "HTTPS may not be working correctly. Check nginx config."
+      fi
+    else
+      warn "Certbot failed. SSL not configured. You can run manually later:"
+      warn "  certbot --nginx -d $SITE_DOMAIN"
+    fi
+  else
+    warn "DNS not pointing to this server yet (expected $SERVER_IP, got $DOMAIN_IP)"
+    warn "Skipping SSL. Once DNS propagates, run:"
+    warn "  certbot --nginx -d $SITE_DOMAIN"
+  fi
+fi
+
+# ============================================================================
 # Phase 6: OpenClaw
 # ============================================================================
 
@@ -497,9 +563,11 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=$OPENCLAW_WORKSPACE
-ExecStart=$OPENCLAW_BIN gateway start --foreground
+ExecStart=$OPENCLAW_BIN gateway run --allow-unconfigured --bind loopback --port 18789
 Restart=always
 RestartSec=10
+Environment=HOME=/root
+Environment=OPENCLAW_HOME=/root/.openclaw
 
 [Install]
 WantedBy=multi-user.target"
@@ -617,10 +685,12 @@ else
   echo "Your agent will wake up and read BOOTSTRAP.md."
 fi
 
-echo ""
-echo "=============================================="
-echo "DNS Reminder"
-echo "=============================================="
-echo "Point your domain to this server's IP, then run:"
-echo "  certbot --nginx -d $SITE_DOMAIN"
-echo "=============================================="
+if [ "$SKIP_SSL" = true ] || [ ! -f "/etc/letsencrypt/live/$SITE_DOMAIN/fullchain.pem" ]; then
+  echo ""
+  echo "=============================================="
+  echo "SSL Reminder"
+  echo "=============================================="
+  echo "SSL was not configured. Once DNS is pointing to this server, run:"
+  echo "  certbot --nginx -d $SITE_DOMAIN"
+  echo "=============================================="
+fi
