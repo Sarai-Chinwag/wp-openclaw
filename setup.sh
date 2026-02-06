@@ -432,6 +432,15 @@ if [ "$MODE" = "fresh" ]; then
   else
     nginx -t && systemctl reload nginx
   fi
+
+  # Ensure nginx and PHP-FPM are enabled on boot
+  run_cmd systemctl enable nginx
+  if [ -n "$PHP_VERSION" ]; then
+    run_cmd systemctl enable "php${PHP_VERSION}-fpm"
+  else
+    # Enable whatever PHP-FPM is installed
+    systemctl enable php*-fpm 2>/dev/null || true
+  fi
 else
   log "Using existing nginx configuration (--existing mode)"
 fi
