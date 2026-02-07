@@ -531,6 +531,28 @@ if [ -d "$SCRIPT_DIR/workspace" ]; then
   log "Copying workspace files..."
   run_cmd cp -r "$SCRIPT_DIR/workspace/"* "$OPENCLAW_WORKSPACE/" || true
   run_cmd mkdir -p "$OPENCLAW_WORKSPACE/memory"
+  
+  # If Data Machine is not installed, remove Data Machine sections from workspace files
+  if [ "$INSTALL_DATA_MACHINE" = false ]; then
+    log "Removing Data Machine references from workspace files..."
+    # Remove Data Machine section from AGENTS.md (between ## Data Machine and next ##)
+    if [ -f "$OPENCLAW_WORKSPACE/AGENTS.md" ]; then
+      sed -i '/^## Data Machine$/,/^## /{/^## Data Machine$/d;/^## /!d;}' "$OPENCLAW_WORKSPACE/AGENTS.md" 2>/dev/null || true
+      # Also remove any remaining datamachine command references
+      sed -i '/wp datamachine/d' "$OPENCLAW_WORKSPACE/AGENTS.md" 2>/dev/null || true
+    fi
+    # Remove Data Machine references from BOOTSTRAP.md
+    if [ -f "$OPENCLAW_WORKSPACE/BOOTSTRAP.md" ]; then
+      # Remove the entire Data Machine section (## Data Machine: to next ##)
+      sed -i '/^## Data Machine/,/^## /{/^## Data Machine/d;/^## /!d;}' "$OPENCLAW_WORKSPACE/BOOTSTRAP.md" 2>/dev/null || true
+      # Remove Data Machine from the "What You Have" list
+      sed -i '/Data Machine.*Self-scheduling/d' "$OPENCLAW_WORKSPACE/BOOTSTRAP.md" 2>/dev/null || true
+      # Remove datamachine commands
+      sed -i '/wp datamachine/d' "$OPENCLAW_WORKSPACE/BOOTSTRAP.md" 2>/dev/null || true
+      # Remove "Set up your first Data Machine flow" from Start Building
+      sed -i '/Set up your first Data Machine flow/d' "$OPENCLAW_WORKSPACE/BOOTSTRAP.md" 2>/dev/null || true
+    fi
+  fi
 fi
 
 # Skip default bootstrap since we're providing our own
