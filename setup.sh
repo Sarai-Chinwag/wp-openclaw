@@ -54,6 +54,7 @@ SKIP_SSL=false
 INSTALL_DATA_MACHINE=true
 SHOW_HELP=false
 DRY_RUN=false
+SECURE_MODE=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -71,6 +72,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-ssl)
       SKIP_SSL=true
+      shift
+      ;;
+    --secure)
+      SECURE_MODE=true
       shift
       ;;
     --help|-h)
@@ -99,6 +104,7 @@ if [ "$SHOW_HELP" = true ]; then
   echo "  --no-data-machine  Skip Data Machine plugin (simpler setup, no self-scheduling)"
   echo "  --skip-deps        Skip apt package installation"
   echo "  --skip-ssl         Skip SSL/HTTPS configuration (certbot)"
+  echo "  --secure           Run agent as non-root 'openclaw' user (recommended for fleets)"
   echo "  --dry-run          Print commands without executing (for testing)"
   echo "  --help, -h         Show this help"
   echo ""
@@ -230,7 +236,19 @@ DB_PASS="${DB_PASS:-$(openssl rand -base64 16)}"
 WP_ADMIN_USER="${WP_ADMIN_USER:-admin}"
 WP_ADMIN_PASS="${WP_ADMIN_PASS:-$(openssl rand -base64 16)}"
 WP_ADMIN_EMAIL="${WP_ADMIN_EMAIL:-admin@$SITE_DOMAIN}"
-OPENCLAW_WORKSPACE="${OPENCLAW_WORKSPACE:-/root/.openclaw/workspace}"
+
+# Set OpenClaw paths based on secure mode
+if [ "$SECURE_MODE" = true ]; then
+  OPENCLAW_USER="openclaw"
+  OPENCLAW_HOME="/home/openclaw/.openclaw"
+  OPENCLAW_WORKSPACE="${OPENCLAW_WORKSPACE:-/home/openclaw/.openclaw/workspace}"
+  OPENCLAW_SKILLS="/home/openclaw/.openclaw/skills"
+else
+  OPENCLAW_USER="root"
+  OPENCLAW_HOME="/root/.openclaw"
+  OPENCLAW_WORKSPACE="${OPENCLAW_WORKSPACE:-/root/.openclaw/workspace}"
+  OPENCLAW_SKILLS="/root/.openclaw/skills"
+fi
 
 # Where this script lives (for copying skills/workspace)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -505,6 +523,33 @@ else
 fi
 
 # ============================================================================
+# Phase 5.6: Secure Mode User Setup
+# ============================================================================
+
+if [ "$SECURE_MODE" = true ]; then
+  log "Setting up secure mode (non-root agent user)..."
+  
+  # Create openclaw user if it doesn't exist
+  if ! id -u openclaw &>/dev/null || [ "$DRY_RUN" = true ]; then
+    log "Creating openclaw user..."
+    run_cmd useradd -m -s /bin/bash -G www-data openclaw
+  else
+    log "User 'openclaw' already exists"
+    # Ensure user is in www-data group
+    run_cmd usermod -a -G www-data openclaw
+  fi
+  
+  # Make WordPress files group-writable so openclaw can edit via www-data group
+  log "Making WordPress files group-writable..."
+  run_cmd chmod -R g+w "$SITE_PATH"
+  
+  # Ensure www-data owns WordPress files with correct group
+  run_cmd chown -R www-data:www-data "$SITE_PATH"
+  
+  log "Secure mode: Agent will run as 'openclaw' user (cannot modify iptables)"
+fi
+
+# ============================================================================
 # Phase 6: OpenClaw
 # ============================================================================
 
@@ -513,16 +558,16 @@ run_cmd npm install -g openclaw
 
 log "Setting up OpenClaw workspace..."
 run_cmd mkdir -p "$OPENCLAW_WORKSPACE"
-run_cmd mkdir -p /root/.openclaw/skills
+run_cmd mkdir -p "$OPENCLAW_SKILLS"
 
 # Copy skills if we have them
 if [ -d "$SCRIPT_DIR/skills" ]; then
   log "Copying skills..."
   # Always copy WordPress skills
-  run_cmd cp -r "$SCRIPT_DIR/skills/wordpress/"* /root/.openclaw/skills/ || true
+  run_cmd cp -r "$SCRIPT_DIR/skills/wordpress/"* "$OPENCLAW_SKILLS/" || true
   # Only copy Data Machine skill if plugin was installed
   if [ "$INSTALL_DATA_MACHINE" = true ]; then
-    run_cmd cp -r "$SCRIPT_DIR/skills/data-machine" /root/.openclaw/skills/ || true
+    run_cmd cp -r "$SCRIPT_DIR/skills/data-machine" "$OPENCLAW_SKILLS/" || true
   fi
 fi
 
@@ -555,8 +600,19 @@ if [ -d "$SCRIPT_DIR/workspace" ]; then
   fi
 fi
 
+# Set ownership for secure mode
+if [ "$SECURE_MODE" = true ]; then
+  log "Setting ownership for openclaw user..."
+  run_cmd chown -R openclaw:openclaw "$OPENCLAW_HOME"
+fi
+
 # Skip default bootstrap since we're providing our own
-run_cmd openclaw config set agents.defaults.skipBootstrap true || true
+if [ "$SECURE_MODE" = true ]; then
+  # Run config as openclaw user
+  run_cmd su - openclaw -c "openclaw config set agents.defaults.skipBootstrap true" || true
+else
+  run_cmd openclaw config set agents.defaults.skipBootstrap true || true
+fi
 
 # ============================================================================
 # Phase 7: Systemd Service (optional)
@@ -586,19 +642,30 @@ else
   log "Using OpenClaw binary: $OPENCLAW_BIN"
 fi
 
+# Build systemd config based on secure mode
+if [ "$SECURE_MODE" = true ]; then
+  SYSTEMD_USER="openclaw"
+  SYSTEMD_HOME="/home/openclaw"
+  SYSTEMD_OPENCLAW_HOME="/home/openclaw/.openclaw"
+else
+  SYSTEMD_USER="root"
+  SYSTEMD_HOME="/root"
+  SYSTEMD_OPENCLAW_HOME="/root/.openclaw"
+fi
+
 SYSTEMD_CONFIG="[Unit]
 Description=OpenClaw AI Agent Gateway
 After=network.target
 
 [Service]
 Type=simple
-User=root
+User=$SYSTEMD_USER
 WorkingDirectory=$OPENCLAW_WORKSPACE
 ExecStart=$OPENCLAW_BIN gateway run --allow-unconfigured --bind loopback --port 18789
 Restart=always
 RestartSec=10
-Environment=HOME=/root
-Environment=OPENCLAW_HOME=/root/.openclaw
+Environment=HOME=$SYSTEMD_HOME
+Environment=OPENCLAW_HOME=$SYSTEMD_OPENCLAW_HOME
 
 [Install]
 WantedBy=multi-user.target"
@@ -635,7 +702,12 @@ echo "  Password: $DB_PASS"
 echo ""
 echo "OpenClaw:"
 echo "  Workspace: $OPENCLAW_WORKSPACE"
-echo "  Skills:    /root/.openclaw/skills/"
+echo "  Skills:    $OPENCLAW_SKILLS"
+if [ "$SECURE_MODE" = true ]; then
+  echo "  User:      openclaw (secure mode - cannot modify iptables)"
+else
+  echo "  User:      root"
+fi
 if [ "$INSTALL_DATA_MACHINE" = true ]; then
   echo "  Data Machine: Installed (autonomous operation enabled)"
 else
@@ -657,7 +729,9 @@ DB_NAME=$DB_NAME
 DB_USER=$DB_USER
 DB_PASS=$DB_PASS
 
-DATA_MACHINE=$INSTALL_DATA_MACHINE"
+DATA_MACHINE=$INSTALL_DATA_MACHINE
+SECURE_MODE=$SECURE_MODE
+OPENCLAW_USER=$OPENCLAW_USER"
 
 write_file "$OPENCLAW_WORKSPACE/.credentials" "$CREDENTIALS_CONTENT"
 run_cmd chmod 600 "$OPENCLAW_WORKSPACE/.credentials"
@@ -684,7 +758,11 @@ elif [ -t 0 ]; then
   echo
   if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
     log "Starting OpenClaw configuration..."
-    openclaw configure
+    if [ "$SECURE_MODE" = true ]; then
+      su - openclaw -c "openclaw configure"
+    else
+      openclaw configure
+    fi
 
     echo ""
     read -p "Start the OpenClaw gateway now? [Y/n] " -n 1 -r
@@ -704,13 +782,21 @@ elif [ -t 0 ]; then
   else
     echo ""
     echo "To configure later:"
-    echo "  openclaw configure"
+    if [ "$SECURE_MODE" = true ]; then
+      echo "  su - openclaw -c 'openclaw configure'"
+    else
+      echo "  openclaw configure"
+    fi
     echo "  systemctl start openclaw"
   fi
 else
   # Non-interactive mode
   echo "Run these commands to complete setup:"
-  echo "  1. openclaw configure    # Set up API keys and channels"
+  if [ "$SECURE_MODE" = true ]; then
+    echo "  1. su - openclaw -c 'openclaw configure'    # Set up API keys and channels"
+  else
+    echo "  1. openclaw configure    # Set up API keys and channels"
+  fi
   echo "  2. systemctl start openclaw"
   echo ""
   echo "Your agent will wake up and read BOOTSTRAP.md."
