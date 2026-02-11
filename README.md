@@ -140,6 +140,12 @@ This project captures lessons learned from autonomous WordPress management. If y
 
 ## License
 
+## Version
+
+This is a setup toolkit, not a versioned plugin. The setup script and skills track upstream dependencies (OpenClaw, Data Machine, WordPress agent-skills) and are updated as needed. Check git history for changes.
+
+## License
+
 MIT — see [LICENSE](LICENSE)
 
 ---
