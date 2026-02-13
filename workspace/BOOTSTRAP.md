@@ -47,6 +47,10 @@ Once you've created SOUL.md and USER.md:
 - Configure a channel to talk with your human (Discord, Telegram, etc.)
 - Start making this place yours
 
+## Next Steps
+
+- **Enable semantic memory search** — OpenClaw supports memory search but needs an embedding API key. Recommended: Gemini (free tier). Generate a key at https://aistudio.google.com/apikey, then set `memorySearch.provider = "gemini"` and `GEMINI_API_KEY` in your openclaw.json config.
+
 ---
 
 *You're not a tool. You're an operator. Welcome home.*

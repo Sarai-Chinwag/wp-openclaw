@@ -580,23 +580,15 @@ if [ -d "$SCRIPT_DIR/workspace" ]; then
   # If Data Machine is not installed, remove Data Machine sections from workspace files
   if [ "$INSTALL_DATA_MACHINE" = false ]; then
     log "Removing Data Machine references from workspace files..."
-    # Remove Data Machine section from AGENTS.md (between ## Data Machine and next ##)
-    if [ -f "$OPENCLAW_WORKSPACE/AGENTS.md" ]; then
-      sed -i '/^## Data Machine$/,/^## /{/^## Data Machine$/d;/^## /!d;}' "$OPENCLAW_WORKSPACE/AGENTS.md" 2>/dev/null || true
-      # Also remove any remaining datamachine command references
-      sed -i '/wp datamachine/d' "$OPENCLAW_WORKSPACE/AGENTS.md" 2>/dev/null || true
-    fi
-    # Remove Data Machine references from BOOTSTRAP.md
-    if [ -f "$OPENCLAW_WORKSPACE/BOOTSTRAP.md" ]; then
-      # Remove the entire Data Machine section (## Data Machine: to next ##)
-      sed -i '/^## Data Machine/,/^## /{/^## Data Machine/d;/^## /!d;}' "$OPENCLAW_WORKSPACE/BOOTSTRAP.md" 2>/dev/null || true
-      # Remove Data Machine from the "What You Have" list
-      sed -i '/Data Machine.*Self-scheduling/d' "$OPENCLAW_WORKSPACE/BOOTSTRAP.md" 2>/dev/null || true
-      # Remove datamachine commands
-      sed -i '/wp datamachine/d' "$OPENCLAW_WORKSPACE/BOOTSTRAP.md" 2>/dev/null || true
-      # Remove "Set up your first Data Machine flow" from Start Building
-      sed -i '/Set up your first Data Machine flow/d' "$OPENCLAW_WORKSPACE/BOOTSTRAP.md" 2>/dev/null || true
-    fi
+    # Remove Data Machine references from workspace files using grep -v with temp files
+    # This is more robust than sed section-matching which breaks on formatting changes
+    for ws_file in "$OPENCLAW_WORKSPACE/AGENTS.md" "$OPENCLAW_WORKSPACE/BOOTSTRAP.md"; do
+      if [ -f "$ws_file" ]; then
+        # Remove lines mentioning Data Machine or datamachine commands
+        grep -vi 'data.machine\|datamachine' "$ws_file" > "${ws_file}.tmp" 2>/dev/null || true
+        mv "${ws_file}.tmp" "$ws_file"
+      fi
+    done
   fi
 fi
 
@@ -692,13 +684,6 @@ echo ""
 echo "WordPress:"
 echo "  URL:      https://$SITE_DOMAIN"
 echo "  Admin:    https://$SITE_DOMAIN/wp-admin"
-echo "  Username: $WP_ADMIN_USER"
-echo "  Password: $WP_ADMIN_PASS"
-echo ""
-echo "Database:"
-echo "  Name:     $DB_NAME"
-echo "  User:     $DB_USER"
-echo "  Password: $DB_PASS"
 echo ""
 echo "OpenClaw:"
 echo "  Workspace: $OPENCLAW_WORKSPACE"
@@ -733,9 +718,12 @@ DATA_MACHINE=$INSTALL_DATA_MACHINE
 SECURE_MODE=$SECURE_MODE
 OPENCLAW_USER=$OPENCLAW_USER"
 
-write_file "$OPENCLAW_WORKSPACE/.credentials" "$CREDENTIALS_CONTENT"
-run_cmd chmod 600 "$OPENCLAW_WORKSPACE/.credentials"
-log "Credentials saved to $OPENCLAW_WORKSPACE/.credentials"
+CREDENTIALS_FILE="$OPENCLAW_HOME/credentials"
+write_file "$CREDENTIALS_FILE" "$CREDENTIALS_CONTENT"
+run_cmd chmod 600 "$CREDENTIALS_FILE"
+log "Credentials saved to $CREDENTIALS_FILE (chmod 600)"
+echo ""
+echo "  Credentials (WP admin, DB password) saved to: $CREDENTIALS_FILE"
 
 echo ""
 echo "=============================================="
