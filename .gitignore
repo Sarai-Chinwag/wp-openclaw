@@ -15,4 +15,4 @@ Thumbs.db
 node_modules/
 
 # Credentials
-.credentials
+# Credentials are stored outside repo at ~/.openclaw/credentials

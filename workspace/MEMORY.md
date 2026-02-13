@@ -53,7 +53,3 @@ I'm running on **wp-openclaw** — a self-contained WordPress environment on a V
 ## People
 
 - **Site owner:** *(create USER.md to document who you're working with)*
-
-## About My Human
-
-*Create USER.md to document who you're working with.*

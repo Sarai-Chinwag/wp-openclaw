@@ -584,9 +584,13 @@ if [ -d "$SCRIPT_DIR/workspace" ]; then
     # This is more robust than sed section-matching which breaks on formatting changes
     for ws_file in "$OPENCLAW_WORKSPACE/AGENTS.md" "$OPENCLAW_WORKSPACE/BOOTSTRAP.md"; do
       if [ -f "$ws_file" ]; then
-        # Remove lines mentioning Data Machine or datamachine commands
-        grep -vi 'data.machine\|datamachine' "$ws_file" > "${ws_file}.tmp" 2>/dev/null || true
-        mv "${ws_file}.tmp" "$ws_file"
+        # Remove Data Machine sections (## Data Machine ... next ##) and standalone DM-only lines
+        # Uses awk to skip section blocks, then grep for individual lines
+        awk '/^## Data Machine/{skip=1; next} /^## /{skip=0} !skip' "$ws_file" > "${ws_file}.tmp" 2>/dev/null || true
+        # Remove individual lines that are purely about Data Machine (wp datamachine commands, DM bullet points)
+        grep -v '^\- .*[Dd]ata [Mm]achine' "${ws_file}.tmp" | grep -v '^wp datamachine' | grep -v '^- `wp datamachine' > "${ws_file}.tmp2" 2>/dev/null || true
+        mv "${ws_file}.tmp2" "$ws_file"
+        rm -f "${ws_file}.tmp"
       fi
     done
   fi
