@@ -662,6 +662,11 @@ Restart=always
 RestartSec=10
 Environment=HOME=$SYSTEMD_HOME
 Environment=OPENCLAW_HOME=$SYSTEMD_OPENCLAW_HOME
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+MemoryMax=2G
+ReadWritePaths=$SYSTEMD_OPENCLAW_HOME /tmp/openclaw /var/www
 
 [Install]
 WantedBy=multi-user.target"
