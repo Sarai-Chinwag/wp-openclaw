@@ -4,6 +4,7 @@ Quick links:
 - [Setup Guide](./setup.md)
 - [Architecture](./architecture.md)
 - [Multisite](./multisite.md)
+- [Securing Your VPS](./securing-openclaw-vps.md)
 - [Changelog](./changelog.md)
 
 ## Overview

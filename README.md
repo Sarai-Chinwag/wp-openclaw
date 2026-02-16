@@ -136,8 +136,7 @@ Data Machine gives your agent a structured toolkit for content automation — pi
 
 ## Documentation
 
-- [docs/README.md](docs/README.md) — Overview and quick links
-- [docs/multisite.md](docs/multisite.md) — Multisite configuration
+- [docs/README.md](docs/README.md) — Full documentation index
 
 ## Contributing
 
