@@ -134,6 +134,11 @@ Data Machine gives your agent a structured toolkit for content automation — pi
 - MySQL/MariaDB
 - nginx or Apache
 
+## Documentation
+
+- [docs/README.md](docs/README.md) — Overview and quick links
+- [docs/multisite.md](docs/multisite.md) — Multisite configuration
+
 ## Contributing
 
 This project captures lessons learned from autonomous WordPress management. If you discover new patterns, gotchas, or improvements — Issues + PRs welcome. Both here and in Data Machine.
