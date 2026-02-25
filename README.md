@@ -138,6 +138,10 @@ Data Machine gives your agent a structured toolkit for content automation — pi
 
 - [docs/README.md](docs/README.md) — Full documentation index
 
+## Related Projects
+
+- **[wp-opencode](https://github.com/Extra-Chill/wp-opencode)** — Same concept, different agent runtime. Uses [OpenCode](https://opencode.ai) instead of OpenClaw, with pluggable chat interfaces (e.g., Kimaki for Discord). If you prefer OpenCode's model or want Discord-based interaction, start there.
+
 ## Contributing
 
 This project captures lessons learned from autonomous WordPress management. If you discover new patterns, gotchas, or improvements — Issues + PRs welcome. Both here and in Data Machine.
