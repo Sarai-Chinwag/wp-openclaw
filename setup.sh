@@ -55,6 +55,9 @@ INSTALL_DATA_MACHINE=true
 SHOW_HELP=false
 DRY_RUN=false
 SECURE_MODE=false
+MULTISITE=false
+MULTISITE_TYPE="subdirectory"
+INSTALL_SKILLS=true
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -86,6 +89,18 @@ while [[ $# -gt 0 ]]; do
       DRY_RUN=true
       shift
       ;;
+    --multisite)
+      MULTISITE=true
+      shift
+      ;;
+    --subdomain)
+      MULTISITE_TYPE="subdomain"
+      shift
+      ;;
+    --no-skills)
+      INSTALL_SKILLS=false
+      shift
+      ;;
     *)
       shift
       ;;
@@ -104,7 +119,10 @@ if [ "$SHOW_HELP" = true ]; then
   echo "  --no-data-machine  Skip Data Machine plugin (simpler setup, no self-scheduling)"
   echo "  --skip-deps        Skip apt package installation"
   echo "  --skip-ssl         Skip SSL/HTTPS configuration (certbot)"
+  echo "  --multisite        Convert to WordPress Multisite (subdirectory by default)"
+  echo "  --subdomain        Use subdomain multisite (requires wildcard DNS; use with --multisite)"
   echo "  --secure           Run agent as non-root 'openclaw' user (recommended for fleets)"
+  echo "  --no-skills        Skip WordPress agent skills installation"
   echo "  --dry-run          Print commands without executing (for testing)"
   echo "  --help, -h         Show this help"
   echo ""
@@ -225,6 +243,17 @@ if [ "$MODE" = "existing" ]; then
     SITE_DOMAIN=$(cd "$SITE_PATH" && wp option get siteurl --allow-root 2>/dev/null | sed 's|https\?://||' || basename "$SITE_PATH")
     log "Existing WordPress detected at: $SITE_PATH"
     log "Site URL: $SITE_DOMAIN"
+
+    # Detect if existing WP is multisite
+    IS_MULTISITE=$(cd "$SITE_PATH" && wp eval 'echo is_multisite() ? "yes" : "no";' --allow-root 2>/dev/null || echo "no")
+    if [ "$IS_MULTISITE" = "yes" ]; then
+      MULTISITE=true
+      IS_SUBDOMAIN=$(cd "$SITE_PATH" && wp eval 'echo is_subdomain_install() ? "yes" : "no";' --allow-root 2>/dev/null || echo "no")
+      if [ "$IS_SUBDOMAIN" = "yes" ]; then
+        MULTISITE_TYPE="subdomain"
+      fi
+      log "Detected existing multisite ($MULTISITE_TYPE)"
+    fi
   fi
 else
   SITE_DOMAIN="${SITE_DOMAIN:-example.com}"
@@ -368,6 +397,24 @@ else
 fi
 
 # ============================================================================
+# Phase 3.5: WordPress Multisite (optional)
+# ============================================================================
+
+if [ "$MULTISITE" = true ] && [ "$MODE" = "fresh" ]; then
+  log "Converting to WordPress Multisite ($MULTISITE_TYPE)..."
+
+  if [ "$MULTISITE_TYPE" = "subdomain" ]; then
+    run_cmd wp core multisite-convert --subdomains --allow-root --path="$SITE_PATH"
+  else
+    run_cmd wp core multisite-convert --allow-root --path="$SITE_PATH"
+  fi
+
+  log "Multisite conversion complete"
+elif [ "$MULTISITE" = true ] && [ "$MODE" = "existing" ]; then
+  log "Existing multisite detected — skipping conversion"
+fi
+
+# ============================================================================
 # Phase 4: Data Machine Plugin (optional)
 # ============================================================================
 
@@ -394,7 +441,14 @@ if [ "$INSTALL_DATA_MACHINE" = true ]; then
     fi
   fi
 
-  run_cmd wp plugin activate data-machine --allow-root --path="$SITE_PATH" || warn "Data Machine may already be active"
+  # Activate DM — on multisite, activate per-site (not network-wide)
+  if [ "$MULTISITE" = true ]; then
+    run_cmd wp plugin activate data-machine --allow-root --path="$SITE_PATH" --url="$SITE_DOMAIN" || warn "Data Machine may already be active"
+    log "Data Machine activated on main site. Activate on subsites with:"
+    log "  wp plugin activate data-machine --url=subsite.$SITE_DOMAIN --allow-root"
+  else
+    run_cmd wp plugin activate data-machine --allow-root --path="$SITE_PATH" || warn "Data Machine may already be active"
+  fi
   run_cmd chown -R www-data:www-data "$SITE_PATH/wp-content/plugins/data-machine"
 else
   log "Skipping Data Machine (--no-data-machine)"
@@ -422,7 +476,74 @@ if [ "$MODE" = "fresh" ]; then
   fi
   log "Using PHP-FPM socket: $PHP_FPM_SOCK"
 
-  NGINX_CONFIG="server {
+  if [ "$MULTISITE" = true ] && [ "$MULTISITE_TYPE" = "subdomain" ]; then
+    # Multisite subdomain: wildcard server_name
+    NGINX_CONFIG="server {
+    listen 80;
+    server_name $SITE_DOMAIN *.$SITE_DOMAIN;
+    root $SITE_PATH;
+    index index.php index.html;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$args;
+    }
+
+    location ~ \\.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:$PHP_FPM_SOCK;
+    }
+
+    location ~ /\\.ht {
+        deny all;
+    }
+
+    # Multisite uploads rewrite
+    location ~ ^/files/(.*)$ {
+        try_files /wp-includes/ms-files.php?\$args =404;
+        access_log off;
+        log_not_found off;
+        expires max;
+    }
+}"
+  elif [ "$MULTISITE" = true ] && [ "$MULTISITE_TYPE" = "subdirectory" ]; then
+    # Multisite subdirectory: rewrite rules for /site-slug/ paths
+    NGINX_CONFIG="server {
+    listen 80;
+    server_name $SITE_DOMAIN www.$SITE_DOMAIN;
+    root $SITE_PATH;
+    index index.php index.html;
+
+    # WordPress multisite subdirectory rules
+    if (!-e \$request_filename) {
+        rewrite /wp-admin\$ \$scheme://\$host\$request_uri/ permanent;
+        rewrite ^(/[^/]+)?(/wp-.*) \$2 last;
+        rewrite ^(/[^/]+)?(/.*\\.php) \$2 last;
+    }
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$args;
+    }
+
+    location ~ \\.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:$PHP_FPM_SOCK;
+    }
+
+    location ~ /\\.ht {
+        deny all;
+    }
+
+    # Multisite uploads rewrite
+    location ~ ^/[_0-9a-zA-Z-]+/files/(.*)$ {
+        try_files /wp-includes/ms-files.php?\$args =404;
+        access_log off;
+        log_not_found off;
+        expires max;
+    }
+}"
+  else
+    # Single site
+    NGINX_CONFIG="server {
     listen 80;
     server_name $SITE_DOMAIN www.$SITE_DOMAIN;
     root $SITE_PATH;
@@ -432,15 +553,16 @@ if [ "$MODE" = "fresh" ]; then
         try_files \$uri \$uri/ /index.php?\$args;
     }
 
-    location ~ \.php$ {
+    location ~ \\.php\$ {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:$PHP_FPM_SOCK;
     }
 
-    location ~ /\.ht {
+    location ~ /\\.ht {
         deny all;
     }
 }"
+  fi
 
   write_file "/etc/nginx/sites-available/$SITE_DOMAIN" "$NGINX_CONFIG"
 
@@ -496,29 +618,51 @@ else
   log "Domain $SITE_DOMAIN resolves to: $DOMAIN_IP"
   
   if [ "$DRY_RUN" = true ]; then
-    echo -e "${BLUE}[dry-run]${NC} certbot --nginx -d $SITE_DOMAIN --non-interactive --agree-tos --email $WP_ADMIN_EMAIL"
+    if [ "$MULTISITE" = true ] && [ "$MULTISITE_TYPE" = "subdomain" ]; then
+      echo -e "${BLUE}[dry-run]${NC} certbot --nginx -d $SITE_DOMAIN (wildcard *.${SITE_DOMAIN} requires DNS validation)"
+    else
+      echo -e "${BLUE}[dry-run]${NC} certbot --nginx -d $SITE_DOMAIN --non-interactive --agree-tos --email $WP_ADMIN_EMAIL"
+    fi
   elif [ "$SERVER_IP" = "$DOMAIN_IP" ]; then
     log "DNS verified! Running certbot..."
-    
-    # Run certbot with nginx plugin (auto-configures SSL in nginx)
-    if certbot --nginx -d "$SITE_DOMAIN" --non-interactive --agree-tos --email "$WP_ADMIN_EMAIL" --redirect; then
-      log "SSL certificate installed successfully!"
-      
-      # Verify HTTPS works
-      sleep 2
-      if curl -s -o /dev/null -w "%{http_code}" "https://$SITE_DOMAIN/" | grep -q "200\|301\|302"; then
-        log "HTTPS verified working!"
+
+    if [ "$MULTISITE" = true ] && [ "$MULTISITE_TYPE" = "subdomain" ]; then
+      # Subdomain multisite needs wildcard cert — requires DNS validation
+      warn "Subdomain multisite requires a wildcard SSL certificate (*.${SITE_DOMAIN})"
+      warn "Wildcard certs require DNS validation (not HTTP). Install a certbot DNS plugin:"
+      warn "  apt install python3-certbot-dns-cloudflare  # (or your DNS provider)"
+      warn "Then run:"
+      warn "  certbot certonly --dns-cloudflare -d $SITE_DOMAIN -d *."
+      warn ""
+      warn "Installing cert for main domain only (subsites will need wildcard later)..."
+      if certbot --nginx -d "$SITE_DOMAIN" --non-interactive --agree-tos --email "$WP_ADMIN_EMAIL" --redirect; then
+        log "SSL installed for main domain. Wildcard cert needed for subdomain sites."
       else
-        warn "HTTPS may not be working correctly. Check nginx config."
+        warn "Certbot failed. Run manually: certbot --nginx -d $SITE_DOMAIN"
       fi
     else
-      warn "Certbot failed. SSL not configured. You can run manually later:"
-      warn "  certbot --nginx -d $SITE_DOMAIN"
+      if certbot --nginx -d "$SITE_DOMAIN" --non-interactive --agree-tos --email "$WP_ADMIN_EMAIL" --redirect; then
+        log "SSL certificate installed successfully!"
+
+        sleep 2
+        if curl -s -o /dev/null -w "%{http_code}" "https://$SITE_DOMAIN/" | grep -q "200\|301\|302"; then
+          log "HTTPS verified working!"
+        else
+          warn "HTTPS may not be working correctly. Check nginx config."
+        fi
+      else
+        warn "Certbot failed. SSL not configured. You can run manually later:"
+        warn "  certbot --nginx -d $SITE_DOMAIN"
+      fi
     fi
   else
     warn "DNS not pointing to this server yet (expected $SERVER_IP, got $DOMAIN_IP)"
     warn "Skipping SSL. Once DNS propagates, run:"
-    warn "  certbot --nginx -d $SITE_DOMAIN"
+    if [ "$MULTISITE" = true ] && [ "$MULTISITE_TYPE" = "subdomain" ]; then
+      warn "  certbot certonly --dns-<provider> -d $SITE_DOMAIN -d '*.$SITE_DOMAIN' (wildcard needs DNS validation)"
+    else
+      warn "  certbot --nginx -d $SITE_DOMAIN"
+    fi
   fi
 fi
 
@@ -560,15 +704,47 @@ log "Setting up OpenClaw workspace..."
 run_cmd mkdir -p "$OPENCLAW_WORKSPACE"
 run_cmd mkdir -p "$OPENCLAW_SKILLS"
 
-# Copy skills if we have them
-if [ -d "$SCRIPT_DIR/skills" ]; then
-  log "Copying skills..."
-  # Always copy WordPress skills
-  run_cmd cp -r "$SCRIPT_DIR/skills/wordpress/"* "$OPENCLAW_SKILLS/" || true
-  # Only copy Data Machine skill if plugin was installed
-  if [ "$INSTALL_DATA_MACHINE" = true ]; then
-    run_cmd cp -r "$SCRIPT_DIR/skills/data-machine" "$OPENCLAW_SKILLS/" || true
+# Install skills
+if [ "$INSTALL_SKILLS" = true ]; then
+  log "Installing WordPress agent skills (cloning latest from GitHub)..."
+  WP_SKILLS_REPO="https://github.com/WordPress/agent-skills.git"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo -e "${BLUE}[dry-run]${NC} git clone $WP_SKILLS_REPO $OPENCLAW_SKILLS/wordpress-agent-skills"
+    echo -e "${BLUE}[dry-run]${NC} (Would copy each skill directory into $OPENCLAW_SKILLS/)"
+  else
+    WP_SKILLS_TMP=$(mktemp -d)
+    if git clone --depth 1 "$WP_SKILLS_REPO" "$WP_SKILLS_TMP" 2>/dev/null; then
+      # Copy each skill directory (skip repo metadata)
+      for skill_dir in "$WP_SKILLS_TMP"/*/; do
+        skill_name=$(basename "$skill_dir")
+        # Skip hidden dirs and non-skill directories
+        if [ -f "$skill_dir/SKILL.md" ]; then
+          cp -r "$skill_dir" "$OPENCLAW_SKILLS/$skill_name"
+          log "  Installed skill: $skill_name"
+        fi
+      done
+      rm -rf "$WP_SKILLS_TMP"
+      log "WordPress agent skills installed (latest version)"
+    else
+      warn "Could not clone WordPress agent skills from $WP_SKILLS_REPO"
+      warn "Skills can be installed later by cloning manually into $OPENCLAW_SKILLS/"
+      rm -rf "$WP_SKILLS_TMP"
+      # Fall back to bundled skills if available
+      if [ -d "$SCRIPT_DIR/skills/wordpress" ]; then
+        log "Using bundled skills as fallback..."
+        run_cmd cp -r "$SCRIPT_DIR/skills/wordpress/"* "$OPENCLAW_SKILLS/" || true
+      fi
+    fi
   fi
+else
+  log "Skipping WordPress agent skills (--no-skills)"
+fi
+
+# Copy Data Machine skill if plugin was installed
+if [ "$INSTALL_DATA_MACHINE" = true ] && [ -d "$SCRIPT_DIR/skills/data-machine" ]; then
+  log "Copying Data Machine skill..."
+  run_cmd cp -r "$SCRIPT_DIR/skills/data-machine" "$OPENCLAW_SKILLS/" || true
 fi
 
 # Copy workspace files if we have them
@@ -702,10 +878,18 @@ if [ "$SECURE_MODE" = true ]; then
 else
   echo "  User:      root"
 fi
+if [ "$MULTISITE" = true ]; then
+  echo "  Multisite:    Yes ($MULTISITE_TYPE)"
+fi
 if [ "$INSTALL_DATA_MACHINE" = true ]; then
   echo "  Data Machine: Installed (autonomous operation enabled)"
 else
   echo "  Data Machine: Not installed (simple setup)"
+fi
+if [ "$INSTALL_SKILLS" = true ]; then
+  echo "  Skills:       WordPress agent skills installed"
+else
+  echo "  Skills:       Skipped (--no-skills)"
 fi
 echo ""
 
@@ -724,6 +908,8 @@ DB_USER=$DB_USER
 DB_PASS=$DB_PASS
 
 DATA_MACHINE=$INSTALL_DATA_MACHINE
+MULTISITE=$MULTISITE
+MULTISITE_TYPE=$MULTISITE_TYPE
 SECURE_MODE=$SECURE_MODE
 OPENCLAW_USER=$OPENCLAW_USER"
 
