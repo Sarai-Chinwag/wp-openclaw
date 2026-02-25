@@ -728,13 +728,8 @@ if [ "$INSTALL_SKILLS" = true ]; then
       log "WordPress agent skills installed (latest version)"
     else
       warn "Could not clone WordPress agent skills from $WP_SKILLS_REPO"
-      warn "Skills can be installed later by cloning manually into $OPENCLAW_SKILLS/"
+      warn "Install later: git clone $WP_SKILLS_REPO && copy skill dirs to $OPENCLAW_SKILLS/"
       rm -rf "$WP_SKILLS_TMP"
-      # Fall back to bundled skills if available
-      if [ -d "$SCRIPT_DIR/skills/wordpress" ]; then
-        log "Using bundled skills as fallback..."
-        run_cmd cp -r "$SCRIPT_DIR/skills/wordpress/"* "$OPENCLAW_SKILLS/" || true
-      fi
     fi
   fi
 else

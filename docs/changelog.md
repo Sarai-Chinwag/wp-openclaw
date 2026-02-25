@@ -13,7 +13,7 @@
 
 ### Changed
 - WordPress agent skills now cloned dynamically from [WordPress/agent-skills](https://github.com/WordPress/agent-skills) at install time (always latest version)
-- Falls back to bundled skills if GitHub clone fails
+- Bundled static skills are no longer used as fallback — if clone fails, agent can install later manually
 
 ## [0.1.0] - 2026-02-16
 - Initial release
