@@ -58,20 +58,16 @@ wp datamachine flows list --url=subsite.example.com --allow-root
 
 This applies to all `wp datamachine` commands — flows, workspace, memory, etc.
 
-## OpenClaw Configuration
+## Agent Configuration
 
-The `opencode.json` (or equivalent config) needs to reference the correct agent file paths for each subsite. If your agent manages multiple subsites, you'll need to account for the different upload paths.
+Your OpenClaw config needs to reference the correct agent file paths for each subsite. If your agent manages multiple subsites, account for the different upload paths.
 
-For a single-site agent, point to that site's specific paths:
+For a single-site agent, point to that site's specific paths in your agent configuration:
 
-```json
-{
-  "prompt": [
-    "wp-content/uploads/sites/2/datamachine-files/agent/SOUL.md",
-    "wp-content/uploads/sites/2/datamachine-files/agent/USER.md",
-    "wp-content/uploads/sites/2/datamachine-files/agent/MEMORY.md"
-  ]
-}
+```
+wp-content/uploads/sites/2/datamachine-files/agent/SOUL.md
+wp-content/uploads/sites/2/datamachine-files/agent/USER.md
+wp-content/uploads/sites/2/datamachine-files/agent/MEMORY.md
 ```
 
 ## AI Provider Keys
